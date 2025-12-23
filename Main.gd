@@ -382,27 +382,32 @@ func _do_cpu_turn() -> void:
 		input_locked = false
 		return
 
-	# Show thinking
-	status_label.text = "BATTLE PHASE\nEnemy plotting..."
-	await get_tree().create_timer(0.3).timeout
+	# Roll pattern instantly (no animation for CPU)
+	GameState._roll_pattern()
+	var pattern: Dictionary = GameState.current_pattern
 
-	# Roll animation for CPU pattern
-	await _play_roll_animation()
+	# Show what pattern they're using
+	status_label.text = "ENEMY TURN"
+	roll_label.text = pattern["name"]
+	roll_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.3))
+	incoming_label.text = "Enemy using: " + pattern["name"]
 
 	# AI chooses strike
 	var worm_shapes := GameState.get_worm_shapes_for_ai()
 	var revealed: Dictionary = GameState.player_board["revealed"]
-	var pattern: Dictionary = GameState.current_pattern
 	var choice := AI.choose_strike(pattern, revealed, worm_shapes)
 
 	# Apply rotation
 	GameState.current_pattern_rotation = choice["rotation"]
-
-	# Show targeting
 	var anchor: Vector2i = choice["anchor"]
-	incoming_label.text = "INCOMING ENEMY STRIKE!"
+
+	# Play targeting scan animation on player grid
+	await _play_targeting_animation(anchor)
+
+	# Show final target
+	incoming_label.text = "INCOMING!"
 	_highlight_strike_preview(anchor, player_cells)
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.3).timeout
 
 	# Apply strike
 	var impacts: Array = GameState.apply_strike(GameState.Owner.CPU, anchor)
@@ -418,11 +423,29 @@ func _do_cpu_turn() -> void:
 		input_locked = false
 		return
 
-	# Player's turn - roll new pattern
+	# Player's turn - roll new pattern with case animation
 	await get_tree().create_timer(0.3).timeout
 	await _play_roll_animation()
 	_update_ui()
 	input_locked = false
+
+func _play_targeting_animation(final_anchor: Vector2i) -> void:
+	# Scan across grid with fake targets before landing on real one
+	var scan_positions: Array = []
+
+	# Generate 4-6 random positions to "consider"
+	var num_scans := randi_range(4, 6)
+	for i in range(num_scans):
+		scan_positions.append(Vector2i(randi() % GRID_SIZE, randi() % GRID_SIZE))
+
+	# Scan through fake positions
+	for pos in scan_positions:
+		_highlight_strike_preview(pos, player_cells)
+		await get_tree().create_timer(0.12).timeout
+		_update_player_grid()  # Reset to normal
+
+	# Brief pause before final target
+	await get_tree().create_timer(0.1).timeout
 
 func _play_roll_animation() -> void:
 	# Decide the winning pattern first
