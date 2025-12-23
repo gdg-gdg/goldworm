@@ -11,16 +11,54 @@ enum Owner { PLAYER, CPU }
 const GRID_SIZE := 6
 
 var WORM_DEFS := {
-	"Sprout": {"name": "Sprout", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true},
-	"Lumpy": {"name": "Lumpy", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1)], "rotatable": true}
+	# 2-segment worms - Common (grey)
+	"Sprout": {"name": "Sprout", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true, "weight": 10},
+	"Bean": {"name": "Bean", "cells": [Vector2i(0, 0), Vector2i(0, 1)], "rotatable": true, "weight": 10},
+	# 3-segment worms - Uncommon (blue)
+	"Wiggles": {"name": "Wiggles", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], "rotatable": true, "weight": 6},
+	"Bendy": {"name": "Bendy", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)], "rotatable": true, "weight": 6},
+	# 4-segment worms - Rare (purple)
+	"Lumpy": {"name": "Lumpy", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1)], "rotatable": true, "weight": 3},
+	"Slinky": {"name": "Slinky", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 3},
+	"Chonk": {"name": "Chonk", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)], "rotatable": false, "weight": 3},
+	"Noodle": {"name": "Noodle", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], "rotatable": true, "weight": 3},
+	# 5-segment worms - Epic (pink)
+	"Thicc": {"name": "Thicc", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1), Vector2i(1, -1)], "rotatable": true, "weight": 1},
+	"Zigzag": {"name": "Zigzag", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2)], "rotatable": true, "weight": 1},
+	"BigBoi": {"name": "BigBoi", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(2, 1)], "rotatable": true, "weight": 1},
 }
 
+# Worms available for placement
+var WORM_POOL := ["Sprout", "Bean", "Wiggles", "Bendy", "Lumpy", "Slinky", "Chonk", "Noodle", "Thicc", "Zigzag", "BigBoi"]
+
 var PATTERN_DEFS := [
-	{"name": "Single", "cells": [Vector2i(0, 0)], "rotatable": false},
-	{"name": "Line2", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true},
-	{"name": "Line3", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], "rotatable": true},
-	{"name": "Cross5", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], "rotatable": true},
-	{"name": "Square2x2", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)], "rotatable": false}
+	# 1 block - Common (grey)
+	{"name": "Pebble", "cells": [Vector2i(0, 0)], "rotatable": false, "weight": 10},
+	# 2 blocks - Common (light blue)
+	{"name": "Twins", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true, "weight": 8},
+	{"name": "Stack", "cells": [Vector2i(0, 0), Vector2i(0, 1)], "rotatable": true, "weight": 8},
+	# 3 blocks - Uncommon (blue)
+	{"name": "Spike", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], "rotatable": true, "weight": 6},
+	{"name": "Corner", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)], "rotatable": true, "weight": 6},
+	{"name": "Stairs", "cells": [Vector2i(0, 0), Vector2i(1, 1), Vector2i(2, 2)], "rotatable": true, "weight": 5},
+	# 4 blocks - Rare (purple)
+	{"name": "Square", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)], "rotatable": false, "weight": 4},
+	{"name": "Tetris-L", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1)], "rotatable": true, "weight": 4},
+	{"name": "Tetris-T", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1)], "rotatable": true, "weight": 4},
+	{"name": "Tetris-S", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 4},
+	{"name": "Line4", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], "rotatable": true, "weight": 3},
+	# 5 blocks - Epic (pink)
+	{"name": "Cross", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], "rotatable": true, "weight": 2},
+	{"name": "Domino", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0)], "rotatable": true, "weight": 2},
+	{"name": "Chonky-L", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(0, 2)], "rotatable": true, "weight": 2},
+	{"name": "Hammer", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1), Vector2i(1, 2)], "rotatable": true, "weight": 2},
+	# 6 blocks - Legendary (red)
+	{"name": "Big-Cross", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], "rotatable": true, "weight": 1},
+	{"name": "Chungus", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 1},
+	{"name": "Stairway", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2), Vector2i(3, 2)], "rotatable": true, "weight": 1},
+	# 7 blocks - Mythic (gold)
+	{"name": "Nuke", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(0, 2), Vector2i(0, -2)], "rotatable": true, "weight": 0.5},
+	{"name": "Annihilator", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0), Vector2i(5, 0), Vector2i(6, 0)], "rotatable": true, "weight": 0.3},
 ]
 
 signal state_changed
@@ -41,6 +79,8 @@ var placement_rotation: int = 0
 func _ready() -> void:
 	reset_game()
 
+var worms_remaining_to_pick := 0  # How many worms player still needs to pick
+
 func reset_game() -> void:
 	phase = Phase.PLACEMENT
 	current_turn = Turn.PLAYER
@@ -49,14 +89,23 @@ func reset_game() -> void:
 	placement_rotation = 0
 	player_board = {"worms": [], "revealed": {}}
 	cpu_board = {"worms": [], "revealed": {}}
-	worms_to_place = ["Sprout", "Lumpy"]
+
+	# Player will pick 2 worms through case openings
+	worms_to_place = []
+	worms_remaining_to_pick = 2
+
 	current_worm_to_place = {}
 	_cpu_place_worms()
 	state_changed.emit()
 
 func _cpu_place_worms() -> void:
+	# Randomly select 2 worms for CPU from pool
+	var available_worms := WORM_POOL.duplicate()
+	available_worms.shuffle()
+	var cpu_worms := [available_worms[0], available_worms[1]]
+
 	# Place worms randomly
-	for worm_name in ["Sprout", "Lumpy"]:
+	for worm_name in cpu_worms:
 		var placed := false
 		var attempts := 0
 		while not placed and attempts < 100:
