@@ -45,6 +45,15 @@ var is_hovering_cpu_grid := false
 var input_locked := false
 var skip_roll := false
 
+# Case opening UI
+var case_overlay: ColorRect
+var case_container: Control
+var case_strip: HBoxContainer
+var case_marker: ColorRect
+var case_items: Array = []
+const CASE_ITEM_WIDTH := 120
+const CASE_ITEM_COUNT := 40  # Total items in strip
+
 # =============================================================================
 # INITIALIZATION
 # =============================================================================
@@ -167,6 +176,70 @@ func _build_ui() -> void:
 	cwp_label.text = "Enemy Worms:"
 	cpu_worm_panel.add_child(cwp_label)
 	right_panel.add_child(cpu_worm_panel)
+
+	# CS:GO style case opening overlay
+	_build_case_overlay()
+
+func _build_case_overlay() -> void:
+	# Dark overlay background
+	case_overlay = ColorRect.new()
+	case_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	case_overlay.color = Color(0, 0, 0, 0.85)
+	case_overlay.visible = false
+	case_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(case_overlay)
+
+	# Container for the case opening elements
+	case_container = Control.new()
+	case_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	case_overlay.add_child(case_container)
+
+	# Title label
+	var title := Label.new()
+	title.text = "ROLLING STRIKE PATTERN"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	title.position.y = 80
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	case_container.add_child(title)
+
+	# Strip container with clip (masks overflow)
+	var strip_clip := Control.new()
+	strip_clip.clip_contents = true
+	strip_clip.custom_minimum_size = Vector2(600, 100)
+	strip_clip.set_anchors_preset(Control.PRESET_CENTER)
+	strip_clip.position = Vector2(-300, -50)
+	case_container.add_child(strip_clip)
+
+	# The scrolling strip
+	case_strip = HBoxContainer.new()
+	case_strip.add_theme_constant_override("separation", 8)
+	strip_clip.add_child(case_strip)
+
+	# Center marker (arrow/line indicator)
+	case_marker = ColorRect.new()
+	case_marker.custom_minimum_size = Vector2(4, 120)
+	case_marker.color = Color(1, 0.8, 0.2)
+	case_marker.set_anchors_preset(Control.PRESET_CENTER)
+	case_marker.position = Vector2(-2, -60)
+	case_container.add_child(case_marker)
+
+	# Top marker triangle
+	var marker_top := ColorRect.new()
+	marker_top.custom_minimum_size = Vector2(20, 20)
+	marker_top.color = Color(1, 0.8, 0.2)
+	marker_top.rotation = PI / 4
+	marker_top.position = Vector2(-10, -75)
+	case_marker.add_child(marker_top)
+
+	# Bottom marker triangle
+	var marker_bot := ColorRect.new()
+	marker_bot.custom_minimum_size = Vector2(20, 20)
+	marker_bot.color = Color(1, 0.8, 0.2)
+	marker_bot.rotation = PI / 4
+	marker_bot.position = Vector2(-10, 115)
+	case_marker.add_child(marker_bot)
 
 func _create_grid(grid_name: String) -> GridContainer:
 	var grid := GridContainer.new()
@@ -352,25 +425,126 @@ func _do_cpu_turn() -> void:
 	input_locked = false
 
 func _play_roll_animation() -> void:
+	# Decide the winning pattern first
+	GameState._roll_pattern()
+	var winning_pattern: Dictionary = GameState.current_pattern
+
+	# Build the strip with random patterns, placing winner near the end
+	_populate_case_strip(winning_pattern)
+
+	# Show overlay
+	case_overlay.visible = true
+	roll_label.text = "..."
+
+	# Calculate target position (winner should land under marker)
+	# Winner is at index CASE_ITEM_COUNT - 5 (near end but not last)
+	var winner_index := CASE_ITEM_COUNT - 5
+	var item_total_width := CASE_ITEM_WIDTH + 8  # width + separation
+	var strip_center := 300.0  # half of clip width
+	var target_x := -(winner_index * item_total_width) + strip_center - (CASE_ITEM_WIDTH / 2.0)
+
+	# Add some randomness to final position (within the winning item)
+	target_x += randf_range(-30, 30)
+
+	# Starting position (off to the right)
+	var start_x := 200.0
+	case_strip.position.x = start_x
+
+	# Animate over 2 seconds with easing
+	var duration := 2.0
+	var elapsed := 0.0
+	var tick := 0.016  # ~60fps
+
+	while elapsed < duration:
+		elapsed += tick
+		var t := elapsed / duration
+
+		# Cubic ease out: 1 - (1-t)^3
+		var eased_t := 1.0 - pow(1.0 - t, 3.0)
+
+		case_strip.position.x = lerp(start_x, target_x, eased_t)
+		await get_tree().create_timer(tick).timeout
+
+	# Ensure final position
+	case_strip.position.x = target_x
+
+	# Flash the winning item
+	await _flash_winning_item(winner_index)
+
+	# Update roll label with result
+	roll_label.text = winning_pattern["name"]
+	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+
+	# Brief pause to show result
+	await get_tree().create_timer(0.5).timeout
+
+	# Hide overlay
+	case_overlay.visible = false
+
+func _populate_case_strip(winning_pattern: Dictionary) -> void:
+	# Clear existing items
+	for child in case_strip.get_children():
+		child.queue_free()
+	case_items.clear()
+
 	var pattern_names: Array = []
 	for p in GameState.PATTERN_DEFS:
 		pattern_names.append(p["name"])
 
-	# Roll through patterns quickly
-	var cycles := 12
-	var delay := 0.05
-	for i in range(cycles):
-		var idx := randi() % pattern_names.size()
-		roll_label.text = pattern_names[idx]
-		roll_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
-		await get_tree().create_timer(delay).timeout
-		delay += 0.02
+	# Create items - winner at position CASE_ITEM_COUNT - 5
+	var winner_index := CASE_ITEM_COUNT - 5
 
-	# Land on actual pattern
-	GameState._roll_pattern()
-	roll_label.text = GameState.current_pattern["name"]
-	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
-	await get_tree().create_timer(0.2).timeout
+	for i in range(CASE_ITEM_COUNT):
+		var item := PanelContainer.new()
+		item.custom_minimum_size = Vector2(CASE_ITEM_WIDTH, 80)
+
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.15, 0.15, 0.2)
+		style.set_corner_radius_all(8)
+		style.border_color = Color(0.3, 0.3, 0.4)
+		style.set_border_width_all(2)
+		item.add_theme_stylebox_override("panel", style)
+
+		var label := Label.new()
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 16)
+
+		if i == winner_index:
+			label.text = winning_pattern["name"]
+			label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3))
+		else:
+			var random_idx := randi() % pattern_names.size()
+			label.text = pattern_names[random_idx]
+			label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+
+		item.add_child(label)
+		case_strip.add_child(item)
+		case_items.append(item)
+
+func _flash_winning_item(winner_index: int) -> void:
+	if winner_index < 0 or winner_index >= case_items.size():
+		return
+
+	var item: PanelContainer = case_items[winner_index]
+
+	# Flash effect
+	for j in range(3):
+		var flash_style := StyleBoxFlat.new()
+		flash_style.bg_color = Color(0.4, 0.35, 0.1)
+		flash_style.set_corner_radius_all(8)
+		flash_style.border_color = Color(1.0, 0.8, 0.2)
+		flash_style.set_border_width_all(3)
+		item.add_theme_stylebox_override("panel", flash_style)
+		await get_tree().create_timer(0.1).timeout
+
+		var normal_style := StyleBoxFlat.new()
+		normal_style.bg_color = Color(0.2, 0.2, 0.15)
+		normal_style.set_corner_radius_all(8)
+		normal_style.border_color = Color(0.8, 0.7, 0.2)
+		normal_style.set_border_width_all(2)
+		item.add_theme_stylebox_override("panel", normal_style)
+		await get_tree().create_timer(0.1).timeout
 
 func _highlight_strike_preview(anchor: Vector2i, cells: Array) -> void:
 	var pattern_cells := GameState.get_pattern_cells(anchor)
