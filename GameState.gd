@@ -55,10 +55,18 @@ func reset_game() -> void:
 	state_changed.emit()
 
 func _cpu_place_worms() -> void:
-	var sprout_instance := _create_worm_instance("Sprout", Vector2i(0, 0), 0)
-	cpu_board["worms"].append(sprout_instance)
-	var lumpy_instance := _create_worm_instance("Lumpy", Vector2i(3, 2), 90)
-	cpu_board["worms"].append(lumpy_instance)
+	# Place worms randomly
+	for worm_name in ["Sprout", "Lumpy"]:
+		var placed := false
+		var attempts := 0
+		while not placed and attempts < 100:
+			var origin := Vector2i(randi() % GRID_SIZE, randi() % GRID_SIZE)
+			var rotation: int = [0, 90, 180, 270][randi() % 4]
+			if validate_worm_placement(cpu_board, worm_name, origin, rotation):
+				var instance := _create_worm_instance(worm_name, origin, rotation)
+				cpu_board["worms"].append(instance)
+				placed = true
+			attempts += 1
 
 func _create_worm_instance(worm_name: String, origin: Vector2i, rotation: int) -> Dictionary:
 	var worm_def = WORM_DEFS[worm_name]

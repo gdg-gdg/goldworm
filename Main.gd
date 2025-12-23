@@ -588,6 +588,9 @@ func _do_cpu_turn() -> void:
 	roll_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.3))
 	incoming_label.text = "Enemy using: " + pattern["name"]
 
+	# Pause to let player see the pattern
+	await get_tree().create_timer(0.8).timeout
+
 	# AI chooses strike
 	var worm_shapes := GameState.get_worm_shapes_for_ai()
 	var revealed: Dictionary = GameState.player_board["revealed"]
@@ -603,7 +606,7 @@ func _do_cpu_turn() -> void:
 	# Show final target
 	incoming_label.text = "INCOMING!"
 	_highlight_strike_preview(anchor, player_cells)
-	await get_tree().create_timer(0.3).timeout
+	await get_tree().create_timer(0.6).timeout
 
 	# Apply strike
 	var impacts: Array = GameState.apply_strike(GameState.Owner.CPU, anchor)
@@ -629,19 +632,23 @@ func _play_targeting_animation(final_anchor: Vector2i) -> void:
 	# Scan across grid with fake targets before landing on real one
 	var scan_positions: Array = []
 
-	# Generate 4-6 random positions to "consider"
-	var num_scans := randi_range(4, 6)
+	# Generate 5-8 random positions to "consider"
+	var num_scans := randi_range(5, 8)
 	for i in range(num_scans):
 		scan_positions.append(Vector2i(randi() % GRID_SIZE, randi() % GRID_SIZE))
 
-	# Scan through fake positions
+	incoming_label.text = "Targeting..."
+
+	# Scan through fake positions with increasing delay
+	var scan_delay := 0.15
 	for pos in scan_positions:
 		_highlight_strike_preview(pos, player_cells)
-		await get_tree().create_timer(0.12).timeout
+		await get_tree().create_timer(scan_delay).timeout
 		_update_player_grid()  # Reset to normal
+		scan_delay += 0.03  # Slow down as we get closer
 
-	# Brief pause before final target
-	await get_tree().create_timer(0.1).timeout
+	# Pause before final target
+	await get_tree().create_timer(0.25).timeout
 
 func _play_roll_animation() -> void:
 	# First, show pool selection
@@ -677,8 +684,8 @@ func _play_roll_animation() -> void:
 	var start_x := 200.0
 	case_strip.position.x = start_x
 
-	# Animate over 2 seconds with easing
-	var duration := 2.0
+	# Animate over 3.5 seconds with easing
+	var duration := 3.5
 	var elapsed := 0.0
 	var tick := 0.016  # ~60fps
 
@@ -809,7 +816,7 @@ func _animate_impacts(impacts: Array, cells: Array) -> void:
 
 		# Flash white
 		_style_cell(cell, Color.WHITE, "")
-		await get_tree().create_timer(0.08).timeout
+		await get_tree().create_timer(0.12).timeout
 
 		# Show result
 		var color: Color
@@ -830,7 +837,7 @@ func _animate_impacts(impacts: Array, cells: Array) -> void:
 				text = ""
 
 		_style_cell(cell, color, text)
-		await get_tree().create_timer(0.12).timeout
+		await get_tree().create_timer(0.18).timeout
 
 	_update_worm_panels()
 
@@ -891,26 +898,85 @@ func _update_worm_panel(panel: VBoxContainer, board: Dictionary, show_all: bool)
 		var child := panel.get_child(1)
 		panel.remove_child(child)
 		child.queue_free()
-	
+
 	for worm in board["worms"]:
-		var lbl := Label.new()
-		var segments := ""
-		for i in range(worm["cells"].size()):
-			var cell: Vector2i = worm["cells"][i]
-			var is_end: bool = cell in worm["end_cells"]
-			var is_hit: bool = worm["hit_set"].has(cell)
-			
-			if show_all or is_hit:
-				if is_hit:
-					segments += "[X]"
-				else:
-					segments += "[O]"
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		panel.add_child(row)
+
+		# Worm name
+		var name_label := Label.new()
+		var destroyed: bool = worm.get("destroyed", false)
+		name_label.text = worm["name"] + ":"
+		name_label.custom_minimum_size.x = 55
+		if destroyed:
+			name_label.add_theme_color_override("font_color", Color(0.5, 0.3, 0.3))
+		else:
+			name_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+		row.add_child(name_label)
+
+		# Visual worm shape
+		var shape_container := _create_worm_visual(worm, show_all)
+		row.add_child(shape_container)
+
+		# Status
+		if destroyed:
+			var status := Label.new()
+			status.text = "SUNK"
+			status.add_theme_font_size_override("font_size", 11)
+			status.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3))
+			row.add_child(status)
+
+func _create_worm_visual(worm: Dictionary, show_all: bool) -> Control:
+	var container := Control.new()
+	var cells: Array = worm["cells"]
+	var end_cells: Array = worm["end_cells"]
+	var hit_set: Dictionary = worm["hit_set"]
+	var destroyed: bool = worm.get("destroyed", false)
+
+	# Find bounds of the worm
+	var min_x := 999
+	var max_x := -999
+	var min_y := 999
+	var max_y := -999
+	for cell in cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_y = mini(min_y, cell.y)
+		max_y = maxi(max_y, cell.y)
+
+	var dot_size := 12.0
+	var spacing := 2.0
+	var width := max_x - min_x + 1
+	var height := max_y - min_y + 1
+
+	container.custom_minimum_size = Vector2(width * (dot_size + spacing), height * (dot_size + spacing))
+
+	for cell in cells:
+		var is_end: bool = cell in end_cells
+		var is_hit: bool = hit_set.has(cell)
+
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(dot_size, dot_size)
+		dot.position = Vector2(
+			(cell.x - min_x) * (dot_size + spacing),
+			(cell.y - min_y) * (dot_size + spacing)
+		)
+
+		# Color based on state
+		if is_hit:
+			dot.color = COLOR_HIT_END if is_end else COLOR_HIT
+		elif show_all:
+			if destroyed:
+				dot.color = Color(0.3, 0.3, 0.3)
 			else:
-				segments += "[?]"
-		
-		var destroyed_text := " (DESTROYED)" if worm.get("destroyed", false) else ""
-		lbl.text = worm["name"] + ": " + segments + destroyed_text
-		panel.add_child(lbl)
+				dot.color = COLOR_WORM_END if is_end else COLOR_WORM
+		else:
+			dot.color = Color(0.4, 0.4, 0.45)  # Unknown/fog
+
+		container.add_child(dot)
+
+	return container
 
 func _update_buttons() -> void:
 	start_button.visible = GameState.phase == GameState.Phase.PLACEMENT and GameState.worms_to_place.is_empty()
