@@ -6,7 +6,19 @@ extends Control
 const CELL_SIZE := 60
 const GRID_SIZE := 6
 
-# UI References (set in _ready)
+# Colors
+const COLOR_EMPTY := Color(0.15, 0.15, 0.2)
+const COLOR_WORM := Color(0.2, 0.5, 0.2)
+const COLOR_WORM_END := Color(0.3, 0.6, 0.3)
+const COLOR_MISS := Color(0.1, 0.2, 0.4)
+const COLOR_HIT := Color(0.6, 0.15, 0.15)
+const COLOR_HIT_END := Color(0.9, 0.2, 0.2)
+const COLOR_PREVIEW_VALID := Color(0.3, 0.7, 0.3, 0.8)
+const COLOR_PREVIEW_INVALID := Color(0.8, 0.3, 0.2, 0.8)
+const COLOR_FOG := Color(0.25, 0.25, 0.3)
+const COLOR_INCOMING := Color(1.0, 0.8, 0.2)
+
+# UI References
 var player_grid: Control
 var cpu_grid: Control
 var status_label: Label
@@ -17,6 +29,9 @@ var cpu_worm_panel: Control
 var start_button: Button
 var rotate_button: Button
 var restart_button: Button
+var roll_panel: PanelContainer
+var roll_label: Label
+var incoming_label: Label
 
 # Grid cell buttons
 var player_cells: Array = []
@@ -25,6 +40,10 @@ var cpu_cells: Array = []
 # Hover state
 var hover_cell: Vector2i = Vector2i(-1, -1)
 var is_hovering_cpu_grid := false
+
+# Animation state
+var input_locked := false
+var skip_roll := false
 
 # =============================================================================
 # INITIALIZATION
@@ -100,6 +119,36 @@ func _build_ui() -> void:
 	restart_button.pressed.connect(_on_restart_pressed)
 	center_panel.add_child(restart_button)
 
+	# Roll panel (slot machine style)
+	roll_panel = PanelContainer.new()
+	var roll_style := StyleBoxFlat.new()
+	roll_style.bg_color = Color(0.1, 0.1, 0.15)
+	roll_style.set_corner_radius_all(8)
+	roll_style.border_color = Color(0.4, 0.4, 0.5)
+	roll_style.set_border_width_all(2)
+	roll_panel.add_theme_stylebox_override("panel", roll_style)
+	roll_panel.custom_minimum_size = Vector2(180, 60)
+	center_panel.add_child(roll_panel)
+
+	var roll_vbox := VBoxContainer.new()
+	roll_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	roll_panel.add_child(roll_vbox)
+
+	roll_label = Label.new()
+	roll_label.text = "---"
+	roll_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	roll_label.add_theme_font_size_override("font_size", 24)
+	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	roll_vbox.add_child(roll_label)
+
+	# Incoming strike label
+	incoming_label = Label.new()
+	incoming_label.text = ""
+	incoming_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	incoming_label.add_theme_font_size_override("font_size", 16)
+	incoming_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+	center_panel.add_child(incoming_label)
+
 	# Right panel (cpu info + grid)
 	var right_panel := VBoxContainer.new()
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -166,6 +215,8 @@ func _input(event: InputEvent) -> void:
 			_on_restart_pressed()
 
 func _on_rotate_pressed() -> void:
+	if input_locked:
+		return
 	if GameState.phase == GameState.Phase.PLACEMENT:
 		GameState.placement_rotation = (GameState.placement_rotation + 90) % 360
 		_update_grid_display()
@@ -174,12 +225,21 @@ func _on_rotate_pressed() -> void:
 		_update_grid_display()
 
 func _on_start_pressed() -> void:
-	if GameState.start_battle():
+	if GameState.worms_to_place.is_empty():
+		input_locked = true
+		GameState.phase = GameState.Phase.BATTLE
+		GameState.current_turn = GameState.Turn.PLAYER
+		_update_ui()
+		await _play_roll_animation()
+		input_locked = false
 		_update_ui()
 
 func _on_restart_pressed() -> void:
+	input_locked = false
 	GameState.reset_game()
 	hover_cell = Vector2i(-1, -1)
+	roll_label.text = "---"
+	incoming_label.text = ""
 	_update_ui()
 
 func _on_cell_hover(cell: Button) -> void:
@@ -196,43 +256,166 @@ func _on_cell_exit(_cell: Button) -> void:
 	_update_grid_display()
 
 func _on_cell_pressed(cell: Button) -> void:
+	if input_locked:
+		return
 	var grid_name: String = cell.get_meta("grid")
 	var x: int = cell.get_meta("x")
 	var y: int = cell.get_meta("y")
 	var cell_pos := Vector2i(x, y)
-	
+
 	if GameState.phase == GameState.Phase.PLACEMENT:
 		if grid_name == "player" and not GameState.current_worm_to_place.is_empty():
 			var worm_name: String = GameState.current_worm_to_place["name"]
 			if GameState.place_player_worm(worm_name, cell_pos, GameState.placement_rotation):
 				_update_ui()
-	
+
 	elif GameState.phase == GameState.Phase.BATTLE:
 		if grid_name == "cpu" and GameState.current_turn == GameState.Turn.PLAYER:
 			if GameState.validate_pattern_placement(cell_pos):
-				GameState.apply_strike(GameState.Owner.PLAYER, cell_pos)
-				_update_ui()
-				# Schedule CPU turn
-				if GameState.phase == GameState.Phase.BATTLE and GameState.current_turn == GameState.Turn.CPU:
-					await get_tree().create_timer(0.5).timeout
-					_do_cpu_turn()
+				_execute_player_strike(cell_pos)
+
+# =============================================================================
+# ANIMATED STRIKE EXECUTION
+# =============================================================================
+
+func _execute_player_strike(anchor: Vector2i) -> void:
+	input_locked = true
+
+	# Show incoming warning
+	incoming_label.text = "LAUNCHING STRIKE!"
+	_highlight_strike_preview(anchor, cpu_cells)
+	await get_tree().create_timer(0.3).timeout
+
+	# Apply strike and get impacts
+	var impacts: Array = GameState.apply_strike(GameState.Owner.PLAYER, anchor)
+
+	# Animate impacts sequentially
+	await _animate_impacts(impacts, cpu_cells)
+
+	incoming_label.text = ""
+	_update_ui()
+
+	# Check for game over
+	if GameState.phase == GameState.Phase.GAME_OVER:
+		input_locked = false
+		return
+
+	# CPU turn after delay
+	await get_tree().create_timer(0.4).timeout
+	await _do_cpu_turn()
 
 func _do_cpu_turn() -> void:
 	if GameState.phase != GameState.Phase.BATTLE or GameState.current_turn != GameState.Turn.CPU:
+		input_locked = false
 		return
-	
+
+	# Show thinking
+	status_label.text = "BATTLE PHASE\nEnemy plotting..."
+	await get_tree().create_timer(0.3).timeout
+
+	# Roll animation for CPU pattern
+	await _play_roll_animation()
+
+	# AI chooses strike
 	var worm_shapes := GameState.get_worm_shapes_for_ai()
 	var revealed: Dictionary = GameState.player_board["revealed"]
 	var pattern: Dictionary = GameState.current_pattern
-	
 	var choice := AI.choose_strike(pattern, revealed, worm_shapes)
-	
-	# Apply the chosen rotation
-	while GameState.current_pattern_rotation != choice["rotation"]:
-		GameState.rotate_pattern()
-	
-	GameState.apply_strike(GameState.Owner.CPU, choice["anchor"])
+
+	# Apply rotation
+	GameState.current_pattern_rotation = choice["rotation"]
+
+	# Show targeting
+	var anchor: Vector2i = choice["anchor"]
+	incoming_label.text = "INCOMING ENEMY STRIKE!"
+	_highlight_strike_preview(anchor, player_cells)
+	await get_tree().create_timer(0.5).timeout
+
+	# Apply strike
+	var impacts: Array = GameState.apply_strike(GameState.Owner.CPU, anchor)
+
+	# Animate impacts
+	await _animate_impacts(impacts, player_cells)
+
+	incoming_label.text = ""
+
+	# Check game over
+	if GameState.phase == GameState.Phase.GAME_OVER:
+		_update_ui()
+		input_locked = false
+		return
+
+	# Player's turn - roll new pattern
+	await get_tree().create_timer(0.3).timeout
+	await _play_roll_animation()
 	_update_ui()
+	input_locked = false
+
+func _play_roll_animation() -> void:
+	var pattern_names: Array = []
+	for p in GameState.PATTERN_DEFS:
+		pattern_names.append(p["name"])
+
+	# Roll through patterns quickly
+	var cycles := 12
+	var delay := 0.05
+	for i in range(cycles):
+		var idx := randi() % pattern_names.size()
+		roll_label.text = pattern_names[idx]
+		roll_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+		await get_tree().create_timer(delay).timeout
+		delay += 0.02
+
+	# Land on actual pattern
+	GameState._roll_pattern()
+	roll_label.text = GameState.current_pattern["name"]
+	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	await get_tree().create_timer(0.2).timeout
+
+func _highlight_strike_preview(anchor: Vector2i, cells: Array) -> void:
+	var pattern_cells := GameState.get_pattern_cells(anchor)
+	for pos in pattern_cells:
+		if pos.x >= 0 and pos.x < GRID_SIZE and pos.y >= 0 and pos.y < GRID_SIZE:
+			var idx: int = pos.y * GRID_SIZE + pos.x
+			var cell: Button = cells[idx]
+			_style_cell(cell, COLOR_INCOMING, "!")
+
+func _animate_impacts(impacts: Array, cells: Array) -> void:
+	for impact in impacts:
+		if impact["already_hit"]:
+			continue
+
+		var cell_pos: Vector2i = impact["cell"]
+		var idx: int = cell_pos.y * GRID_SIZE + cell_pos.x
+		var cell: Button = cells[idx]
+		var result: GameState.CellState = impact["result"]
+
+		# Flash white
+		_style_cell(cell, Color.WHITE, "")
+		await get_tree().create_timer(0.08).timeout
+
+		# Show result
+		var color: Color
+		var text: String
+		match result:
+			GameState.CellState.MISS:
+				color = COLOR_MISS
+				text = "."
+			GameState.CellState.HIT_BODY:
+				color = COLOR_HIT
+				text = "X"
+			GameState.CellState.HIT_END:
+				color = COLOR_HIT_END
+				text = "E"
+				incoming_label.text = "END HIT!"
+			_:
+				color = COLOR_EMPTY
+				text = ""
+
+		_style_cell(cell, color, text)
+		await get_tree().create_timer(0.12).timeout
+
+	_update_worm_panels()
 
 # =============================================================================
 # UI UPDATE
@@ -316,6 +499,7 @@ func _update_buttons() -> void:
 	start_button.visible = GameState.phase == GameState.Phase.PLACEMENT and GameState.worms_to_place.is_empty()
 	rotate_button.visible = GameState.phase != GameState.Phase.GAME_OVER
 	worm_select_panel.visible = GameState.phase == GameState.Phase.PLACEMENT
+	roll_panel.visible = GameState.phase == GameState.Phase.BATTLE or GameState.phase == GameState.Phase.GAME_OVER
 
 func _update_grid_display() -> void:
 	_update_player_grid()
@@ -327,30 +511,30 @@ func _update_player_grid() -> void:
 		var x: int = i % GRID_SIZE
 		var y: int = i / GRID_SIZE
 		var pos := Vector2i(x, y)
-		
-		var color := Color.DARK_GRAY
+
+		var color := COLOR_EMPTY
 		var text := ""
-		
+
 		# Check if worm is here
 		var worm := GameState.get_player_worm_at(pos)
 		if not worm.is_empty():
-			color = Color.DARK_GREEN
-			if pos in worm["end_cells"]:
-				text = "E"
-		
+			var is_end: bool = pos in worm["end_cells"]
+			color = COLOR_WORM_END if is_end else COLOR_WORM
+			text = "E" if is_end else ""
+
 		# Check revealed state (CPU strikes)
 		var state := GameState.get_player_cell_state(pos)
 		match state:
 			GameState.CellState.MISS:
-				color = Color.DARK_BLUE
+				color = COLOR_MISS
 				text = "."
 			GameState.CellState.HIT_BODY:
-				color = Color.DARK_RED
+				color = COLOR_HIT
 				text = "X"
 			GameState.CellState.HIT_END:
-				color = Color.RED
+				color = COLOR_HIT_END
 				text = "E"
-		
+
 		# Preview worm placement
 		if GameState.phase == GameState.Phase.PLACEMENT and not GameState.current_worm_to_place.is_empty():
 			if hover_cell.x >= 0 and not is_hovering_cpu_grid:
@@ -366,8 +550,8 @@ func _update_player_grid() -> void:
 						hover_cell,
 						GameState.placement_rotation
 					)
-					color = Color.GREEN if valid else Color.ORANGE_RED
-		
+					color = COLOR_PREVIEW_VALID if valid else COLOR_PREVIEW_INVALID
+
 		_style_cell(cell, color, text)
 
 func _update_cpu_grid() -> void:
@@ -376,44 +560,63 @@ func _update_cpu_grid() -> void:
 		var x: int = i % GRID_SIZE
 		var y: int = i / GRID_SIZE
 		var pos := Vector2i(x, y)
-		
-		var color := Color.SLATE_GRAY
-		var text := "?"
-		
+
+		var color := COLOR_FOG
+		var text := ""
+
 		# Check revealed state (player strikes)
 		var state := GameState.get_cpu_cell_state(pos)
 		match state:
 			GameState.CellState.MISS:
-				color = Color.DARK_BLUE
+				color = COLOR_MISS
 				text = "."
 			GameState.CellState.HIT_BODY:
-				color = Color.DARK_RED
+				color = COLOR_HIT
 				text = "X"
 			GameState.CellState.HIT_END:
-				color = Color.RED
+				color = COLOR_HIT_END
 				text = "E"
-		
-		# Preview strike pattern
-		if GameState.phase == GameState.Phase.BATTLE and GameState.current_turn == GameState.Turn.PLAYER:
+
+		# Preview strike pattern (ghost stencil)
+		if GameState.phase == GameState.Phase.BATTLE and GameState.current_turn == GameState.Turn.PLAYER and not input_locked:
 			if hover_cell.x >= 0 and is_hovering_cpu_grid:
 				var pattern_cells := GameState.get_pattern_cells(hover_cell)
 				if pos in pattern_cells:
 					var valid := GameState.validate_pattern_placement(hover_cell)
 					if valid:
-						color = Color.YELLOW if state == GameState.CellState.UNKNOWN else color.lightened(0.3)
+						if state == GameState.CellState.UNKNOWN:
+							color = COLOR_PREVIEW_VALID
+							text = "+"
+						else:
+							color = color.lightened(0.3)
 					else:
-						color = Color.ORANGE_RED
-		
+						color = COLOR_PREVIEW_INVALID
+
 		_style_cell(cell, color, text)
 
 func _style_cell(cell: Button, color: Color, text: String) -> void:
 	var stylebox := StyleBoxFlat.new()
 	stylebox.bg_color = color
 	stylebox.set_corner_radius_all(4)
+	stylebox.border_color = color.lightened(0.15)
+	stylebox.set_border_width_all(1)
 	cell.add_theme_stylebox_override("normal", stylebox)
-	cell.add_theme_stylebox_override("hover", stylebox)
-	cell.add_theme_stylebox_override("pressed", stylebox)
+
+	var hover_style := StyleBoxFlat.new()
+	hover_style.bg_color = color.lightened(0.12)
+	hover_style.set_corner_radius_all(4)
+	hover_style.border_color = Color(0.8, 0.8, 0.9)
+	hover_style.set_border_width_all(2)
+	cell.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style := StyleBoxFlat.new()
+	pressed_style.bg_color = color.darkened(0.1)
+	pressed_style.set_corner_radius_all(4)
+	cell.add_theme_stylebox_override("pressed", pressed_style)
+
 	cell.text = text
+	cell.add_theme_font_size_override("font_size", 16)
+	cell.add_theme_color_override("font_color", Color.WHITE)
 
 # =============================================================================
 # EVENT HANDLERS
@@ -438,7 +641,13 @@ func _on_worm_destroyed(owner: GameState.Owner, worm_name: String) -> void:
 	status_label.text += "\n" + target + " " + worm_name + " destroyed!"
 
 func _on_game_over(winner: GameState.Owner) -> void:
+	input_locked = false
 	if winner == GameState.Owner.PLAYER:
 		status_label.text = "VICTORY!\nYou destroyed all enemy worms!"
+		roll_label.text = "YOU WIN!"
+		roll_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
 	else:
 		status_label.text = "DEFEAT!\nAll your worms were destroyed!"
+		roll_label.text = "GAME OVER"
+		roll_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	incoming_label.text = ""
