@@ -18,6 +18,17 @@ const COLOR_PREVIEW_INVALID := Color(0.8, 0.3, 0.2, 0.8)
 const COLOR_FOG := Color(0.25, 0.25, 0.3)
 const COLOR_INCOMING := Color(1.0, 0.8, 0.2)
 
+# Rarity colors by block count (1-7)
+const RARITY_COLORS := {
+	1: Color(0.5, 0.5, 0.5),      # Grey
+	2: Color(0.6, 0.85, 1.0),     # Light blue
+	3: Color(0.3, 0.5, 1.0),      # Blue
+	4: Color(0.6, 0.3, 0.9),      # Purple
+	5: Color(1.0, 0.4, 0.7),      # Pink
+	6: Color(1.0, 0.2, 0.2),      # Red
+	7: Color(1.0, 0.85, 0.2)      # Gold
+}
+
 # UI References
 var player_grid: Control
 var cpu_grid: Control
@@ -53,6 +64,13 @@ var case_marker: ColorRect
 var case_items: Array = []
 const CASE_ITEM_WIDTH := 120
 const CASE_ITEM_COUNT := 40  # Total items in strip
+
+# Pool selection UI
+var pool_overlay: ColorRect
+var pool_container: VBoxContainer
+var pool_options: Array = []  # The two pool buttons
+var selected_pool: Array = []  # The chosen pool of patterns
+var pool_selected := false
 
 # =============================================================================
 # INITIALIZATION
@@ -240,6 +258,184 @@ func _build_case_overlay() -> void:
 	marker_bot.rotation = PI / 4
 	marker_bot.position = Vector2(-10, 115)
 	case_marker.add_child(marker_bot)
+
+	# Build pool selection overlay
+	_build_pool_overlay()
+
+func _build_pool_overlay() -> void:
+	# Dark overlay
+	pool_overlay = ColorRect.new()
+	pool_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pool_overlay.color = Color(0, 0, 0, 0.9)
+	pool_overlay.visible = false
+	pool_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(pool_overlay)
+
+	# Main container
+	pool_container = VBoxContainer.new()
+	pool_container.set_anchors_preset(Control.PRESET_CENTER)
+	pool_container.position = Vector2(-300, -200)
+	pool_container.custom_minimum_size = Vector2(600, 400)
+	pool_container.add_theme_constant_override("separation", 30)
+	pool_overlay.add_child(pool_container)
+
+	# Title
+	var title := Label.new()
+	title.text = "CHOOSE YOUR CASE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	pool_container.add_child(title)
+
+	# Options container (horizontal)
+	var options_hbox := HBoxContainer.new()
+	options_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	options_hbox.add_theme_constant_override("separation", 40)
+	pool_container.add_child(options_hbox)
+
+	# Create two pool option buttons
+	for i in range(2):
+		var option := _create_pool_option(i)
+		options_hbox.add_child(option)
+		pool_options.append(option)
+
+func _create_pool_option(index: int) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(250, 300)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.4, 0.4, 0.5)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+
+	# Case label
+	var case_label := Label.new()
+	case_label.text = "Case " + str(index + 1)
+	case_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	case_label.add_theme_font_size_override("font_size", 20)
+	case_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	vbox.add_child(case_label)
+
+	# Pattern preview container
+	var preview_container := VBoxContainer.new()
+	preview_container.add_theme_constant_override("separation", 6)
+	preview_container.set_meta("preview_container", true)
+	vbox.add_child(preview_container)
+
+	# Make it clickable
+	var button := Button.new()
+	button.set_anchors_preset(Control.PRESET_FULL_RECT)
+	button.flat = true
+	button.pressed.connect(_on_pool_selected.bind(index))
+	panel.add_child(button)
+
+	return panel
+
+func _get_rarity_color(cell_count: int) -> Color:
+	var count := clampi(cell_count, 1, 7)
+	return RARITY_COLORS.get(count, Color.WHITE)
+
+func _create_shape_visual(pattern: Dictionary, size: float = 10.0) -> Control:
+	# Create a visual grid showing the pattern shape
+	var container := Control.new()
+	var cells: Array = pattern["cells"]
+
+	# Find bounds
+	var min_x := 0
+	var max_x := 0
+	var min_y := 0
+	var max_y := 0
+	for cell in cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_y = mini(min_y, cell.y)
+		max_y = maxi(max_y, cell.y)
+
+	var width := max_x - min_x + 1
+	var height := max_y - min_y + 1
+	var rarity_color := _get_rarity_color(cells.size())
+
+	container.custom_minimum_size = Vector2(width * (size + 2), height * (size + 2))
+
+	for cell in cells:
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(size, size)
+		dot.color = rarity_color
+		dot.position = Vector2((cell.x - min_x) * (size + 2), (cell.y - min_y) * (size + 2))
+		container.add_child(dot)
+
+	return container
+
+func _generate_random_pool() -> Array:
+	# Generate a random pool of 3-5 patterns
+	var pool: Array = []
+	var all_patterns := GameState.PATTERN_DEFS.duplicate()
+	var pool_size := randi_range(3, 5)
+
+	for i in range(pool_size):
+		if all_patterns.is_empty():
+			break
+		var idx := randi() % all_patterns.size()
+		pool.append(all_patterns[idx])
+		# Can include duplicates for variety
+
+	return pool
+
+func _show_pool_selection() -> void:
+	pool_selected = false
+
+	# Generate two random pools
+	var pools: Array = [_generate_random_pool(), _generate_random_pool()]
+
+	# Update pool option displays
+	for i in range(2):
+		var panel: PanelContainer = pool_options[i]
+		panel.set_meta("pool", pools[i])
+
+		# Find the preview container
+		var vbox: VBoxContainer = panel.get_child(0)
+		var preview_container: VBoxContainer = null
+		for child in vbox.get_children():
+			if child.has_meta("preview_container"):
+				preview_container = child
+				break
+
+		if preview_container:
+			# Clear old previews
+			for child in preview_container.get_children():
+				child.queue_free()
+
+			# Add pattern previews
+			for pattern in pools[i]:
+				var row := HBoxContainer.new()
+				row.add_theme_constant_override("separation", 8)
+
+				# Shape visual
+				var shape := _create_shape_visual(pattern, 8.0)
+				row.add_child(shape)
+
+				# Pattern name with rarity color
+				var name_label := Label.new()
+				name_label.text = pattern["name"]
+				name_label.add_theme_font_size_override("font_size", 14)
+				name_label.add_theme_color_override("font_color", _get_rarity_color(pattern["cells"].size()))
+				row.add_child(name_label)
+
+				preview_container.add_child(row)
+
+	pool_overlay.visible = true
+
+func _on_pool_selected(index: int) -> void:
+	var panel: PanelContainer = pool_options[index]
+	selected_pool = panel.get_meta("pool")
+	pool_selected = true
+	pool_overlay.visible = false
 
 func _create_grid(grid_name: String) -> GridContainer:
 	var grid := GridContainer.new()
@@ -448,11 +644,19 @@ func _play_targeting_animation(final_anchor: Vector2i) -> void:
 	await get_tree().create_timer(0.1).timeout
 
 func _play_roll_animation() -> void:
-	# Decide the winning pattern first
-	GameState._roll_pattern()
-	var winning_pattern: Dictionary = GameState.current_pattern
+	# First, show pool selection
+	_show_pool_selection()
 
-	# Build the strip with random patterns, placing winner near the end
+	# Wait for user to select a pool
+	while not pool_selected:
+		await get_tree().create_timer(0.05).timeout
+
+	# Pick a random pattern from the selected pool
+	var winning_pattern: Dictionary = selected_pool[randi() % selected_pool.size()]
+	GameState.current_pattern = winning_pattern
+	GameState.current_pattern_rotation = 0
+
+	# Build the strip with patterns from the pool
 	_populate_case_strip(winning_pattern)
 
 	# Show overlay
@@ -496,7 +700,7 @@ func _play_roll_animation() -> void:
 
 	# Update roll label with result
 	roll_label.text = winning_pattern["name"]
-	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	roll_label.add_theme_color_override("font_color", _get_rarity_color(winning_pattern["cells"].size()))
 
 	# Brief pause to show result
 	await get_tree().create_timer(0.5).timeout
@@ -510,38 +714,53 @@ func _populate_case_strip(winning_pattern: Dictionary) -> void:
 		child.queue_free()
 	case_items.clear()
 
-	var pattern_names: Array = []
-	for p in GameState.PATTERN_DEFS:
-		pattern_names.append(p["name"])
-
 	# Create items - winner at position CASE_ITEM_COUNT - 5
 	var winner_index := CASE_ITEM_COUNT - 5
 
 	for i in range(CASE_ITEM_COUNT):
+		var pattern: Dictionary
+		if i == winner_index:
+			pattern = winning_pattern
+		else:
+			# Pick random pattern from selected pool
+			pattern = selected_pool[randi() % selected_pool.size()]
+
+		var rarity_color := _get_rarity_color(pattern["cells"].size())
+
 		var item := PanelContainer.new()
 		item.custom_minimum_size = Vector2(CASE_ITEM_WIDTH, 80)
 
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.15, 0.15, 0.2)
+		style.bg_color = Color(0.12, 0.12, 0.18)
 		style.set_corner_radius_all(8)
-		style.border_color = Color(0.3, 0.3, 0.4)
+		# Border color based on rarity
+		style.border_color = rarity_color.darkened(0.3)
 		style.set_border_width_all(2)
 		item.add_theme_stylebox_override("panel", style)
 
+		# VBox to hold shape and name
+		var vbox := VBoxContainer.new()
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		vbox.add_theme_constant_override("separation", 4)
+		item.add_child(vbox)
+
+		# Center container for shape
+		var center := CenterContainer.new()
+		center.custom_minimum_size = Vector2(CASE_ITEM_WIDTH - 10, 45)
+		vbox.add_child(center)
+
+		# Visual shape
+		var shape := _create_shape_visual(pattern, 10.0)
+		center.add_child(shape)
+
+		# Pattern name
 		var label := Label.new()
+		label.text = pattern["name"]
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 16)
+		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_color_override("font_color", rarity_color)
+		vbox.add_child(label)
 
-		if i == winner_index:
-			label.text = winning_pattern["name"]
-			label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3))
-		else:
-			var random_idx := randi() % pattern_names.size()
-			label.text = pattern_names[random_idx]
-			label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-
-		item.add_child(label)
 		case_strip.add_child(item)
 		case_items.append(item)
 
@@ -550,21 +769,22 @@ func _flash_winning_item(winner_index: int) -> void:
 		return
 
 	var item: PanelContainer = case_items[winner_index]
+	var rarity_color := _get_rarity_color(GameState.current_pattern["cells"].size())
 
-	# Flash effect
+	# Flash effect with rarity color
 	for j in range(3):
 		var flash_style := StyleBoxFlat.new()
-		flash_style.bg_color = Color(0.4, 0.35, 0.1)
+		flash_style.bg_color = rarity_color.darkened(0.6)
 		flash_style.set_corner_radius_all(8)
-		flash_style.border_color = Color(1.0, 0.8, 0.2)
+		flash_style.border_color = rarity_color
 		flash_style.set_border_width_all(3)
 		item.add_theme_stylebox_override("panel", flash_style)
 		await get_tree().create_timer(0.1).timeout
 
 		var normal_style := StyleBoxFlat.new()
-		normal_style.bg_color = Color(0.2, 0.2, 0.15)
+		normal_style.bg_color = rarity_color.darkened(0.7)
 		normal_style.set_corner_radius_all(8)
-		normal_style.border_color = Color(0.8, 0.7, 0.2)
+		normal_style.border_color = rarity_color.darkened(0.2)
 		normal_style.set_border_width_all(2)
 		item.add_theme_stylebox_override("panel", normal_style)
 		await get_tree().create_timer(0.1).timeout
