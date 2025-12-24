@@ -548,9 +548,8 @@ func _play_spin_animation() -> void:
 			item = loot_item
 		else:
 			item = loot_pool[randi() % loot_pool.size()]
-		# Dim owned items (except the winning item which should stand out)
-		var dim_it := (i != winning_index)
-		var item_panel := _create_item_panel(item, dim_it)
+		# Always dim owned items (including winning item if it's a duplicate)
+		var item_panel := _create_item_panel(item, true)
 		strip.add_child(item_panel)
 
 	# Wait a frame for sizes to be valid
