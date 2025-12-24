@@ -115,9 +115,18 @@ func _create_slot_panel(slot_index: int) -> Control:
 	style.set_border_width_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 
+	# Add margin for padding inside the panel
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 15)
+	margin.add_theme_constant_override("margin_bottom", 15)
+	panel.add_child(margin)
+
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 15)
-	panel.add_child(hbox)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(hbox)
 
 	# Slot info
 	var info_vbox := VBoxContainer.new()
@@ -179,7 +188,7 @@ func _create_slot_panel(slot_index: int) -> Control:
 func _update_slots() -> void:
 	for i in range(SLOT_COUNT):
 		var info := SaveManager.get_slot_info(i)
-		var panel: PanelContainer = slot_buttons[i].get_parent().get_parent().get_parent()
+		var panel: PanelContainer = slot_buttons[i].get_parent().get_parent().get_parent().get_parent()
 		var details_label: Label = panel.get_meta("details_label")
 
 		if info.get("exists", false):
