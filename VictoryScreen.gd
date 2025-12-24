@@ -113,8 +113,9 @@ func _build_ui() -> void:
 	box_panel.add_child(box_vbox)
 
 	var box_icon := Label.new()
-	box_icon.text = "🎁"
+	box_icon.text = "?"
 	box_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box_icon.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	Fonts.apply_body(box_icon, 64, Color.WHITE)
 	box_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box_vbox.add_child(box_icon)
@@ -122,6 +123,7 @@ func _build_ui() -> void:
 	var box_label := Label.new()
 	box_label.text = "CLICK TO OPEN"
 	box_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	Fonts.apply_body(box_label, 16, Color(0.9, 0.7, 0.3))
 	box_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box_vbox.add_child(box_label)
@@ -548,6 +550,10 @@ func _play_spin_animation() -> void:
 	# Build a long strip with the winning item near the end
 	var winning_index := STRIP_ITEMS - VISIBLE_ITEMS / 2 - 2 + randi() % 3
 
+	# Calculate how many trailing items we need after the winner
+	# Need enough to fill the right side of the visible area
+	var trailing_items := VISIBLE_ITEMS / 2 + 3
+
 	for i in range(STRIP_ITEMS):
 		var item: Dictionary
 		if i == winning_index:
@@ -555,6 +561,12 @@ func _play_spin_animation() -> void:
 		else:
 			item = loot_pool[randi() % loot_pool.size()]
 		# Always dim owned items (including winning item if it's a duplicate)
+		var item_panel := _create_item_panel(item, true)
+		strip.add_child(item_panel)
+
+	# Add extra trailing items after the main strip to prevent empty space on the right
+	for i in range(trailing_items):
+		var item: Dictionary = loot_pool[randi() % loot_pool.size()]
 		var item_panel := _create_item_panel(item, true)
 		strip.add_child(item_panel)
 
@@ -616,17 +628,18 @@ func _show_result() -> void:
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 20)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	result_panel.add_child(hbox)
 
-	# Icon
-	var icon := Label.new()
-	icon.text = "🐛" if loot_item.get("type") == "worm" else "💥"
-	Fonts.apply_body(icon, 48, Color.WHITE)
-	hbox.add_child(icon)
+	# Shape visual icon
+	var cells: Array = loot_item.get("cells", [])
+	var shape := _create_shape_visual(cells, rarity_color, 10.0)
+	hbox.add_child(shape)
 
 	# Info
 	var info_vbox := VBoxContainer.new()
 	info_vbox.add_theme_constant_override("separation", 5)
+	info_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(info_vbox)
 
 	var rarity_label := Label.new()
@@ -664,3 +677,34 @@ func _save_unlock() -> void:
 
 func _on_continue() -> void:
 	get_tree().change_scene_to_file("res://NPCMenu.tscn")
+
+func _create_shape_visual(cells: Array, color: Color, size: float = 12.0) -> Control:
+	var container := Control.new()
+
+	if cells.is_empty():
+		return container
+
+	# Find bounds
+	var min_x := 0
+	var max_x := 0
+	var min_y := 0
+	var max_y := 0
+	for cell in cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_y = mini(min_y, cell.y)
+		max_y = maxi(max_y, cell.y)
+
+	var width := max_x - min_x + 1
+	var height := max_y - min_y + 1
+
+	container.custom_minimum_size = Vector2(width * (size + 2), height * (size + 2))
+
+	for cell in cells:
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(size, size)
+		dot.color = color
+		dot.position = Vector2((cell.x - min_x) * (size + 2), (cell.y - min_y) * (size + 2))
+		container.add_child(dot)
+
+	return container

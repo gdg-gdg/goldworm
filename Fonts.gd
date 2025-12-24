@@ -29,3 +29,8 @@ func apply_body(label: Label, size: int = 14, color: Color = Color.WHITE) -> voi
 func apply_button(button: Button, size: int = 14) -> void:
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", size)
+
+## Apply font to a LineEdit
+func apply_line_edit(line_edit: LineEdit, size: int = 14) -> void:
+	line_edit.add_theme_font_override("font", FONT)
+	line_edit.add_theme_font_size_override("font_size", size)

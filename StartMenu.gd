@@ -6,7 +6,13 @@ const SLOT_COUNT := 3
 
 var slot_buttons: Array = []
 var delete_buttons: Array = []
+var rename_buttons: Array = []
+var slot_name_labels: Array = []
 var selected_slot: int = -1
+var name_input_popup: Control
+var name_input_line: LineEdit
+var pending_slot: int = -1
+var is_rename: bool = false
 
 func _ready() -> void:
 	_build_ui()
@@ -58,13 +64,14 @@ func _build_ui() -> void:
 	var subtitle := Label.new()
 	subtitle.text = "Select a save file"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	Fonts.apply_body(subtitle, 20, Color(0.6, 0.6, 0.7))
 	main_vbox.add_child(subtitle)
 
-	# Slots container (lets you add spacing cleanly)
+	# Slots container (centered)
 	var slots_vbox := VBoxContainer.new()
 	slots_vbox.add_theme_constant_override("separation", 12)
-	slots_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slots_vbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	main_vbox.add_child(slots_vbox)
 
 	for i in range(SLOT_COUNT):
@@ -118,9 +125,11 @@ func _create_slot_panel(slot_index: int) -> Control:
 	hbox.add_child(info_vbox)
 
 	var slot_label := Label.new()
+	slot_label.name = "SlotName"
 	slot_label.text = "Save Slot %d" % (slot_index + 1)
 	Fonts.apply_body(slot_label, 20, Color(0.8, 0.8, 0.9))
 	info_vbox.add_child(slot_label)
+	slot_name_labels.append(slot_label)
 
 	var details_label := Label.new()
 	details_label.name = "Details"
@@ -141,12 +150,24 @@ func _create_slot_panel(slot_index: int) -> Control:
 	btn_vbox.add_child(play_btn)
 	slot_buttons.append(play_btn)
 
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 5)
+	btn_vbox.add_child(btn_row)
+
+	var rename_btn := Button.new()
+	rename_btn.text = "Rename"
+	rename_btn.custom_minimum_size = Vector2(70, 30)
+	rename_btn.pressed.connect(_on_slot_rename.bind(slot_index))
+	Fonts.apply_button(rename_btn, 12)
+	btn_row.add_child(rename_btn)
+	rename_buttons.append(rename_btn)
+
 	var delete_btn := Button.new()
 	delete_btn.text = "Delete"
-	delete_btn.custom_minimum_size = Vector2(100, 30)
+	delete_btn.custom_minimum_size = Vector2(70, 30)
 	delete_btn.pressed.connect(_on_slot_delete.bind(slot_index))
-	Fonts.apply_button(delete_btn, 14)
-	btn_vbox.add_child(delete_btn)
+	Fonts.apply_button(delete_btn, 12)
+	btn_row.add_child(delete_btn)
 	delete_buttons.append(delete_btn)
 
 	# Store reference to details label
@@ -162,18 +183,24 @@ func _update_slots() -> void:
 		var details_label: Label = panel.get_meta("details_label")
 
 		if info.get("exists", false):
+			var save_name: String = info.get("save_name", "Save %d" % (i + 1))
 			var worms: int = info.get("worm_count", 0)
 			var patterns: int = info.get("pattern_count", 0)
-			var npcs: int = info.get("npc_count", 0)
 			var drops: int = info.get("total_drops", 0)
+			slot_name_labels[i].text = save_name
+			Fonts.apply_body(slot_name_labels[i], 20, Color(0.9, 0.85, 0.7))
 			details_label.text = "%d Worms | %d Patterns | %d Drops" % [worms, patterns, drops]
 			Fonts.apply_body(details_label, 14, Color(0.7, 0.8, 0.7))
 			slot_buttons[i].text = "Continue"
+			rename_buttons[i].visible = true
 			delete_buttons[i].visible = true
 		else:
-			details_label.text = "Empty - Click to start new game"
+			slot_name_labels[i].text = "Empty Slot"
+			Fonts.apply_body(slot_name_labels[i], 20, Color(0.5, 0.5, 0.6))
+			details_label.text = "Click New Game to start"
 			Fonts.apply_body(details_label, 14, Color(0.5, 0.5, 0.6))
 			slot_buttons[i].text = "New Game"
+			rename_buttons[i].visible = false
 			delete_buttons[i].visible = false
 
 func _on_slot_play(slot_index: int) -> void:
@@ -184,9 +211,115 @@ func _on_slot_play(slot_index: int) -> void:
 		if SaveManager.load_game(slot_index):
 			_go_to_npc_menu()
 	else:
-		# Create new save
-		if SaveManager.create_new_game(slot_index):
+		# Show name input popup for new game
+		pending_slot = slot_index
+		is_rename = false
+		_show_name_popup("Enter Save Name", "New Save")
+
+func _on_slot_rename(slot_index: int) -> void:
+	var info := SaveManager.get_slot_info(slot_index)
+	if not info.get("exists", false):
+		return
+
+	pending_slot = slot_index
+	is_rename = true
+	var current_name: String = info.get("save_name", "Save %d" % (slot_index + 1))
+	_show_name_popup("Rename Save", current_name)
+
+func _show_name_popup(title_text: String, default_name: String) -> void:
+	# Create overlay
+	name_input_popup = ColorRect.new()
+	name_input_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	name_input_popup.color = Color(0, 0, 0, 0.7)
+	add_child(name_input_popup)
+
+	# Center container
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	name_input_popup.add_child(center)
+
+	# Popup panel
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(400, 200)
+	center.add_child(panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.4, 0.4, 0.5)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 20)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	title.text = title_text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_title(title, 24)
+	vbox.add_child(title)
+
+	# Input field
+	name_input_line = LineEdit.new()
+	name_input_line.text = default_name
+	name_input_line.placeholder_text = "Enter name..."
+	name_input_line.custom_minimum_size = Vector2(300, 40)
+	name_input_line.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_input_line.select_all_on_focus = true
+	Fonts.apply_line_edit(name_input_line, 18)
+	name_input_line.text_submitted.connect(_on_name_submitted)
+	vbox.add_child(name_input_line)
+
+	# Buttons row
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 20)
+	vbox.add_child(btn_row)
+
+	var confirm_btn := Button.new()
+	confirm_btn.text = "Confirm"
+	confirm_btn.custom_minimum_size = Vector2(120, 40)
+	confirm_btn.pressed.connect(_on_name_confirmed)
+	Fonts.apply_button(confirm_btn, 16)
+	btn_row.add_child(confirm_btn)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(120, 40)
+	cancel_btn.pressed.connect(_on_name_cancelled)
+	Fonts.apply_button(cancel_btn, 16)
+	btn_row.add_child(cancel_btn)
+
+	# Focus the input
+	name_input_line.grab_focus()
+
+func _on_name_submitted(_text: String) -> void:
+	_on_name_confirmed()
+
+func _on_name_confirmed() -> void:
+	var save_name := name_input_line.text.strip_edges()
+	if save_name.is_empty():
+		save_name = "New Save"
+
+	name_input_popup.queue_free()
+	name_input_popup = null
+
+	if is_rename:
+		if SaveManager.rename_save(pending_slot, save_name):
+			_update_slots()
+	else:
+		if SaveManager.create_new_game(pending_slot, save_name):
 			_go_to_npc_menu()
+
+	pending_slot = -1
+
+func _on_name_cancelled() -> void:
+	name_input_popup.queue_free()
+	name_input_popup = null
+	pending_slot = -1
 
 func _on_slot_delete(slot_index: int) -> void:
 	# Show confirmation dialog

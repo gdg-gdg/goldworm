@@ -30,9 +30,10 @@ func _ready() -> void:
 # SAVE DATA STRUCTURE
 # =============================================================================
 
-func _create_new_save() -> Dictionary:
+func _create_new_save(save_name: String = "New Save") -> Dictionary:
 	return {
 		"version": 1,
+		"save_name": save_name,
 		"created_at": Time.get_datetime_string_from_system(),
 		"last_played": Time.get_datetime_string_from_system(),
 		"unlocked_worms": STARTING_WORMS.duplicate(),
@@ -66,6 +67,7 @@ func get_slot_info(slot: int) -> Dictionary:
 
 	return {
 		"exists": true,
+		"save_name": data.get("save_name", "Save %d" % (slot + 1)),
 		"last_played": data.get("last_played", "Unknown"),
 		"worm_count": data.get("unlocked_worms", []).size(),
 		"pattern_count": data.get("unlocked_patterns", []).size(),
@@ -99,15 +101,37 @@ func load_slot_data(slot: int) -> Dictionary:
 # SAVE/LOAD OPERATIONS
 # =============================================================================
 
-func create_new_game(slot: int) -> bool:
+func create_new_game(slot: int, save_name: String = "New Save") -> bool:
 	## Create a new save in the specified slot
-	save_data = _create_new_save()
+	save_data = _create_new_save(save_name)
 	current_slot = slot
 
 	if _write_save():
 		save_created.emit(slot)
 		return true
 	return false
+
+func rename_save(slot: int, new_name: String) -> bool:
+	## Rename an existing save
+	var data := load_slot_data(slot)
+	if data.is_empty():
+		return false
+
+	data["save_name"] = new_name
+
+	var path := get_save_path(slot)
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+
+	file.store_string(JSON.stringify(data, "\t"))
+	file.close()
+
+	# If this is the current slot, update save_data too
+	if current_slot == slot:
+		save_data["save_name"] = new_name
+
+	return true
 
 func load_game(slot: int) -> bool:
 	## Load an existing save

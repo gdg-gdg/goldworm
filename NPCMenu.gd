@@ -105,6 +105,8 @@ func _create_stats_panel() -> Control:
 
 	# Worms count
 	var worms_vbox := VBoxContainer.new()
+	worms_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	worms_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(worms_vbox)
 
 	var worms_count := Label.new()
@@ -122,6 +124,8 @@ func _create_stats_panel() -> Control:
 
 	# Patterns count
 	var patterns_vbox := VBoxContainer.new()
+	patterns_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	patterns_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(patterns_vbox)
 
 	var patterns_count := Label.new()
@@ -139,6 +143,8 @@ func _create_stats_panel() -> Control:
 
 	# Drops count
 	var drops_vbox := VBoxContainer.new()
+	drops_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	drops_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_child(drops_vbox)
 
 	var drops_count := Label.new()
