@@ -18,8 +18,9 @@ const COLOR_PREVIEW_INVALID := Color(0.8, 0.3, 0.2, 0.8)
 const COLOR_FOG := Color(0.25, 0.25, 0.3)
 const COLOR_INCOMING := Color(1.0, 0.8, 0.2)
 
-# Rarity colors by block count (1-7)
+# Rarity colors by block count (0=miss, 1-7)
 const RARITY_COLORS := {
+	0: Color(0.3, 0.1, 0.1),      # Miss - Dark red
 	1: Color(0.5, 0.5, 0.5),      # Grey
 	2: Color(0.6, 0.85, 1.0),     # Light blue
 	3: Color(0.3, 0.5, 1.0),      # Blue
@@ -429,7 +430,18 @@ func _get_rarity_color(cell_count: int) -> Color:
 func _create_shape_visual(pattern: Dictionary, size: float = 10.0) -> Control:
 	# Create a visual grid showing the pattern shape
 	var container := Control.new()
-	var cells: Array = pattern["cells"]
+	var cells: Array = pattern.get("cells", [])
+	var is_miss: bool = pattern.get("is_miss", false)
+
+	# Handle miss patterns (no cells)
+	if is_miss or cells.is_empty():
+		var miss_label := Label.new()
+		miss_label.text = "MISS"
+		miss_label.add_theme_font_size_override("font_size", int(size * 1.2))
+		miss_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+		container.add_child(miss_label)
+		container.custom_minimum_size = Vector2(size * 4, size * 1.5)
+		return container
 
 	# Find bounds
 	var min_x := 0
@@ -829,8 +841,19 @@ func _on_start_pressed() -> void:
 		GameState.current_turn = GameState.Turn.PLAYER
 		_update_ui()
 		await _play_roll_animation()
-		input_locked = false
-		_update_ui()
+
+		# Check if player got a miss
+		if GameState.current_pattern.get("is_miss", false):
+			incoming_label.text = "You got a " + GameState.current_pattern["name"] + "! Turn skipped..."
+			await get_tree().create_timer(1.0).timeout
+			incoming_label.text = ""
+			# Skip to CPU turn
+			GameState.current_turn = GameState.Turn.CPU
+			_update_ui()
+			await _do_cpu_turn()
+		else:
+			input_locked = false
+			_update_ui()
 
 func _on_restart_pressed() -> void:
 	input_locked = false
@@ -913,6 +936,33 @@ func _do_cpu_turn() -> void:
 	GameState._roll_pattern()
 	var pattern: Dictionary = GameState.current_pattern
 
+	# Check if CPU got a miss
+	if pattern.get("is_miss", false):
+		status_label.text = "ENEMY TURN"
+		roll_label.text = pattern["name"] + " - SKIP!"
+		roll_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+		incoming_label.text = "Enemy got a " + pattern["name"] + "! Their turn skipped!"
+		await get_tree().create_timer(1.2).timeout
+		incoming_label.text = ""
+
+		# Skip to player's turn
+		GameState.current_turn = GameState.Turn.PLAYER
+		await get_tree().create_timer(0.3).timeout
+		await _play_roll_animation()
+		_update_ui()
+
+		# Check if player also got a miss (recursive handling)
+		if GameState.current_pattern.get("is_miss", false):
+			incoming_label.text = "You got a " + GameState.current_pattern["name"] + "! Turn skipped..."
+			await get_tree().create_timer(1.0).timeout
+			incoming_label.text = ""
+			GameState.current_turn = GameState.Turn.CPU
+			_update_ui()
+			await _do_cpu_turn()
+		else:
+			input_locked = false
+		return
+
 	# Show what pattern they're using
 	status_label.text = "ENEMY TURN"
 	roll_label.text = pattern["name"]
@@ -922,10 +972,10 @@ func _do_cpu_turn() -> void:
 	# Pause to let player see the pattern
 	await get_tree().create_timer(0.8).timeout
 
-	# AI chooses strike
-	var worm_shapes := GameState.get_worm_shapes_for_ai()
+	# AI chooses strike - pass worm names (AI knows WHICH worms, not WHERE)
+	var worm_names := GameState.get_player_worm_names_for_ai()
 	var revealed: Dictionary = GameState.player_board["revealed"]
-	var choice := AI.choose_strike(pattern, revealed, worm_shapes)
+	var choice := AI.choose_strike(pattern, revealed, worm_names)
 
 	# Apply rotation
 	GameState.current_pattern_rotation = choice["rotation"]
@@ -957,7 +1007,18 @@ func _do_cpu_turn() -> void:
 	await get_tree().create_timer(0.3).timeout
 	await _play_roll_animation()
 	_update_ui()
-	input_locked = false
+
+	# Check if player got a miss
+	if GameState.current_pattern.get("is_miss", false):
+		incoming_label.text = "You got a " + GameState.current_pattern["name"] + "! Turn skipped..."
+		await get_tree().create_timer(1.0).timeout
+		incoming_label.text = ""
+		# Skip back to CPU turn
+		GameState.current_turn = GameState.Turn.CPU
+		_update_ui()
+		await _do_cpu_turn()
+	else:
+		input_locked = false
 
 func _play_targeting_animation(final_anchor: Vector2i) -> void:
 	# Scan across grid with fake targets before landing on real one
@@ -1034,12 +1095,18 @@ func _play_roll_animation() -> void:
 	case_strip.position.x = target_x
 
 	# Flash the winning item
-	var pattern_rarity := _get_rarity_color(winning_pattern["cells"].size())
+	var cell_count: int = winning_pattern.get("cells", []).size()
+	var is_miss: bool = winning_pattern.get("is_miss", false)
+	var pattern_rarity := _get_rarity_color(cell_count) if not is_miss else RARITY_COLORS[0]
 	await _flash_winning_item(winner_index, pattern_rarity)
 
 	# Update roll label with result
-	roll_label.text = winning_pattern["name"]
-	roll_label.add_theme_color_override("font_color", _get_rarity_color(winning_pattern["cells"].size()))
+	if is_miss:
+		roll_label.text = winning_pattern["name"] + " - SKIP!"
+		roll_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+	else:
+		roll_label.text = winning_pattern["name"]
+		roll_label.add_theme_color_override("font_color", _get_rarity_color(cell_count))
 
 	# Brief pause to show result
 	await get_tree().create_timer(0.5).timeout
@@ -1064,8 +1131,10 @@ func _populate_case_strip(winning_pattern: Dictionary) -> void:
 			# Pick random pattern from selected pool
 			pattern = selected_pool[randi() % selected_pool.size()]
 
-		var rarity_color := _get_rarity_color(pattern["cells"].size())
-		var is_rotatable: bool = pattern.get("rotatable", false)
+		var pattern_cells: Array = pattern.get("cells", [])
+		var is_miss: bool = pattern.get("is_miss", false)
+		var rarity_color := _get_rarity_color(pattern_cells.size()) if not is_miss else RARITY_COLORS[0]
+		var is_rotatable: bool = pattern.get("rotatable", false) and not is_miss
 
 		var item := PanelContainer.new()
 		item.custom_minimum_size = Vector2(CASE_ITEM_WIDTH, 90 if is_rotatable else 80)

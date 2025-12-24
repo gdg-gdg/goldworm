@@ -2,6 +2,10 @@ extends Node
 ## GameState.gd - Core game state singleton (autoload)
 ## HOW TO RUN: 1. Open project in Godot 4.x 2. Press F5 or click Play
 ## CONTROLS: Left Click: Place worm/place strike, R: Rotate
+##
+## Definitions are loaded from:
+##   - worm_defs.gd (WormDefs class)
+##   - pattern_defs.gd (PatternDefs class)
 
 enum Phase { PLACEMENT, BATTLE, GAME_OVER }
 enum Turn { PLAYER, CPU }
@@ -10,56 +14,15 @@ enum Owner { PLAYER, CPU }
 
 const GRID_SIZE := 6
 
-var WORM_DEFS := {
-	# 2-segment worms - Common (grey)
-	"Sprout": {"name": "Sprout", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true, "weight": 10},
-	"Bean": {"name": "Bean", "cells": [Vector2i(0, 0), Vector2i(0, 1)], "rotatable": true, "weight": 10},
-	# 3-segment worms - Uncommon (blue)
-	"Wiggles": {"name": "Wiggles", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], "rotatable": true, "weight": 6},
-	"Bendy": {"name": "Bendy", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)], "rotatable": true, "weight": 6},
-	# 4-segment worms - Rare (purple)
-	"Lumpy": {"name": "Lumpy", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1)], "rotatable": true, "weight": 3},
-	"Slinky": {"name": "Slinky", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 3},
-	"Chonk": {"name": "Chonk", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)], "rotatable": false, "weight": 3},
-	"Noodle": {"name": "Noodle", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], "rotatable": true, "weight": 3},
-	# 5-segment worms - Epic (pink)
-	"Thicc": {"name": "Thicc", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1), Vector2i(1, -1)], "rotatable": true, "weight": 1},
-	"Zigzag": {"name": "Zigzag", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2)], "rotatable": true, "weight": 1},
-	"BigBoi": {"name": "BigBoi", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(2, 1)], "rotatable": true, "weight": 1},
-}
+# References to config files
+var WORM_DEFS: Dictionary:
+	get: return WormDefs.WORMS
 
-# Worms available for placement
-var WORM_POOL := ["Sprout", "Bean", "Wiggles", "Bendy", "Lumpy", "Slinky", "Chonk", "Noodle", "Thicc", "Zigzag", "BigBoi"]
+var WORM_POOL: Array:
+	get: return WormDefs.POOL
 
-var PATTERN_DEFS := [
-	# 1 block - Common (grey)
-	{"name": "Pebble", "cells": [Vector2i(0, 0)], "rotatable": false, "weight": 10},
-	# 2 blocks - Common (light blue)
-	{"name": "Twins", "cells": [Vector2i(0, 0), Vector2i(1, 0)], "rotatable": true, "weight": 8},
-	{"name": "Stack", "cells": [Vector2i(0, 0), Vector2i(0, 1)], "rotatable": true, "weight": 8},
-	# 3 blocks - Uncommon (blue)
-	{"name": "Spike", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)], "rotatable": true, "weight": 6},
-	{"name": "Corner", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)], "rotatable": true, "weight": 6},
-	{"name": "Stairs", "cells": [Vector2i(0, 0), Vector2i(1, 1), Vector2i(2, 2)], "rotatable": true, "weight": 5},
-	# 4 blocks - Rare (purple)
-	{"name": "Square", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)], "rotatable": false, "weight": 4},
-	{"name": "Tetris-L", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1)], "rotatable": true, "weight": 4},
-	{"name": "Tetris-T", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1)], "rotatable": true, "weight": 4},
-	{"name": "Tetris-S", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 4},
-	{"name": "Line4", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)], "rotatable": true, "weight": 3},
-	# 5 blocks - Epic (pink)
-	{"name": "Cross", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], "rotatable": true, "weight": 2},
-	{"name": "Domino", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0)], "rotatable": true, "weight": 2},
-	{"name": "Chonky-L", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(0, 2)], "rotatable": true, "weight": 2},
-	{"name": "Hammer", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(1, 1), Vector2i(1, 2)], "rotatable": true, "weight": 2},
-	# 6 blocks - Legendary (red)
-	{"name": "Big-Cross", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)], "rotatable": true, "weight": 1},
-	{"name": "Chungus", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1)], "rotatable": true, "weight": 1},
-	{"name": "Stairway", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2), Vector2i(3, 2)], "rotatable": true, "weight": 1},
-	# 7 blocks - Mythic (gold)
-	{"name": "Nuke", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(0, 2), Vector2i(0, -2)], "rotatable": true, "weight": 0.5},
-	{"name": "Annihilator", "cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0), Vector2i(5, 0), Vector2i(6, 0)], "rotatable": true, "weight": 0.3},
-]
+var PATTERN_DEFS: Array:
+	get: return PatternDefs.PATTERNS
 
 signal state_changed
 signal strike_resolved(owner: Owner, impacts: Array)
@@ -325,9 +288,15 @@ func get_remaining_worms(owner: Owner) -> Array:
 			remaining.append(worm)
 	return remaining
 
-func get_worm_shapes_for_ai() -> Array:
-	var shapes: Array = []
+func get_player_worm_names_for_ai() -> Array[String]:
+	## Returns the names of the player's worms (not destroyed ones)
+	## The AI knows WHICH worms the player selected, but not WHERE they placed them
+	var names: Array[String] = []
 	for worm in player_board["worms"]:
 		if not worm.get("destroyed", false):
-			shapes.append(WORM_DEFS[worm["name"]])
-	return shapes
+			names.append(worm["name"])
+	return names
+
+func get_worm_def(worm_name: String) -> Dictionary:
+	## Get the base worm definition by name
+	return WORM_DEFS.get(worm_name, {})
