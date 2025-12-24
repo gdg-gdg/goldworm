@@ -29,7 +29,9 @@ var strip: HBoxContainer
 var pointer: ColorRect
 var result_panel: PanelContainer
 var continue_btn: Button
-var open_btn: Button
+var loot_box_btn: Button
+var case_area: Control
+var defeated_label: Label
 
 func _ready() -> void:
 	npc_id = GameState.current_npc_id
@@ -64,17 +66,62 @@ func _build_ui() -> void:
 
 	# Defeated NPC name
 	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
-	var defeated_label := Label.new()
-	defeated_label.text = "You defeated %s! Open your reward case!" % npc.get("name", "???")
+	defeated_label = Label.new()
+	defeated_label.text = "You defeated %s!" % npc.get("name", "???")
 	defeated_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	defeated_label.add_theme_font_size_override("font_size", 20)
 	defeated_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
 	main_vbox.add_child(defeated_label)
 
-	# Case opening area - using anchors for centering
-	var case_area := Control.new()
+	# Loot box button (shown initially, hidden after click)
+	var loot_box_container := CenterContainer.new()
+	loot_box_container.custom_minimum_size = Vector2(0, 200)
+	main_vbox.add_child(loot_box_container)
+
+	loot_box_btn = Button.new()
+	loot_box_btn.custom_minimum_size = Vector2(200, 180)
+	loot_box_btn.flat = true
+	loot_box_btn.pressed.connect(_on_open_case)
+	loot_box_container.add_child(loot_box_btn)
+
+	# Loot box visual
+	var box_panel := PanelContainer.new()
+	box_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loot_box_btn.add_child(box_panel)
+
+	var box_style := StyleBoxFlat.new()
+	box_style.bg_color = Color(0.15, 0.12, 0.08)
+	box_style.set_corner_radius_all(12)
+	box_style.border_color = Color(0.8, 0.6, 0.2)
+	box_style.set_border_width_all(4)
+	box_panel.add_theme_stylebox_override("panel", box_style)
+
+	var box_vbox := VBoxContainer.new()
+	box_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	box_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box_panel.add_child(box_vbox)
+
+	var box_icon := Label.new()
+	box_icon.text = "🎁"
+	box_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box_icon.add_theme_font_size_override("font_size", 64)
+	box_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box_vbox.add_child(box_icon)
+
+	var box_label := Label.new()
+	box_label.text = "CLICK TO OPEN"
+	box_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box_label.add_theme_font_size_override("font_size", 16)
+	box_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	box_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box_vbox.add_child(box_label)
+
+	# Case opening area (hidden initially) - using anchors for centering
+	case_area = Control.new()
 	case_area.custom_minimum_size = Vector2(ITEM_WIDTH * VISIBLE_ITEMS + 40, 180)
 	case_area.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	case_area.visible = false
 	main_vbox.add_child(case_area)
 
 	# Strip container with clipping - centered with anchors
@@ -110,7 +157,7 @@ func _build_ui() -> void:
 	strip.add_theme_constant_override("separation", 0)
 	strip_container.add_child(strip)
 
-	# Center pointer/marker - anchored to center of case_area
+	# Center pointer/marker (simple line)
 	pointer = ColorRect.new()
 	pointer.color = Color(1.0, 0.8, 0.2)
 	pointer.custom_minimum_size = Vector2(4, ITEM_HEIGHT + 20)
@@ -121,18 +168,6 @@ func _build_ui() -> void:
 	pointer.offset_top = 10
 	pointer.offset_bottom = 10 + ITEM_HEIGHT + 20
 	case_area.add_child(pointer)
-
-	# Pointer arrow top - anchored to center
-	var arrow_top := Label.new()
-	arrow_top.text = "▼"
-	arrow_top.anchor_left = 0.5
-	arrow_top.anchor_right = 0.5
-	arrow_top.offset_left = -10
-	arrow_top.offset_right = 10
-	arrow_top.offset_top = 0
-	arrow_top.add_theme_font_size_override("font_size", 20)
-	arrow_top.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
-	case_area.add_child(arrow_top)
 
 	# Result panel (hidden until reveal)
 	result_panel = PanelContainer.new()
@@ -146,18 +181,11 @@ func _build_ui() -> void:
 	result_style.set_border_width_all(3)
 	result_panel.add_theme_stylebox_override("panel", result_style)
 
-	# Buttons
+	# Continue button (hidden until case opened)
 	var btn_hbox := HBoxContainer.new()
 	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_hbox.add_theme_constant_override("separation", 20)
 	main_vbox.add_child(btn_hbox)
-
-	open_btn = Button.new()
-	open_btn.text = "🎰 Open Case!"
-	open_btn.custom_minimum_size = Vector2(200, 50)
-	open_btn.add_theme_font_size_override("font_size", 20)
-	open_btn.pressed.connect(_on_open_case)
-	btn_hbox.add_child(open_btn)
 
 	continue_btn = Button.new()
 	continue_btn.text = "Continue"
@@ -165,19 +193,6 @@ func _build_ui() -> void:
 	continue_btn.pressed.connect(_on_continue)
 	continue_btn.visible = false
 	btn_hbox.add_child(continue_btn)
-
-	# Pre-populate strip with items for preview
-	_populate_strip_preview()
-
-func _populate_strip_preview() -> void:
-	# Show a static preview of items
-	for child in strip.get_children():
-		child.queue_free()
-
-	for i in range(VISIBLE_ITEMS):
-		var item: Dictionary = loot_pool[randi() % loot_pool.size()]
-		var item_panel := _create_item_panel(item)
-		strip.add_child(item_panel)
 
 func _create_item_panel(item: Dictionary) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -271,11 +286,21 @@ func _on_open_case() -> void:
 		return
 
 	case_opened = true
-	open_btn.disabled = true
-	open_btn.text = "Opening..."
+	loot_box_btn.disabled = true
 
 	# Roll for loot first
 	loot_item = NPCDefs.roll_loot(npc_id)
+
+	# Dramatic box opening effect
+	await _play_box_open_animation()
+
+	# Hide loot box, show case area
+	loot_box_btn.get_parent().visible = false
+	case_area.visible = true
+	defeated_label.text = "Opening case..."
+
+	# Wait a moment for dramatic effect
+	await get_tree().create_timer(0.3).timeout
 
 	# Play the spinning animation
 	await _play_spin_animation()
@@ -289,8 +314,35 @@ func _on_open_case() -> void:
 	# Record NPC defeat
 	SaveManager.record_npc_defeat(npc_id)
 
-	open_btn.visible = false
 	continue_btn.visible = true
+
+func _play_box_open_animation() -> void:
+	# Shake and flash the box before opening
+	var original_pos := loot_box_btn.position
+	var box_panel: PanelContainer = loot_box_btn.get_child(0)
+	var box_style: StyleBoxFlat = box_panel.get_theme_stylebox("panel")
+
+	# Shake effect
+	for i in range(10):
+		loot_box_btn.position.x = original_pos.x + randf_range(-8, 8)
+		loot_box_btn.position.y = original_pos.y + randf_range(-4, 4)
+
+		# Flash border color
+		var flash_style := box_style.duplicate()
+		flash_style.border_color = Color(1, 1, 1) if i % 2 == 0 else Color(0.8, 0.6, 0.2)
+		box_panel.add_theme_stylebox_override("panel", flash_style)
+
+		await get_tree().create_timer(0.05).timeout
+
+	loot_box_btn.position = original_pos
+
+	# Final bright flash
+	var flash_style := box_style.duplicate()
+	flash_style.bg_color = Color(1, 0.9, 0.7)
+	flash_style.border_color = Color(1, 1, 1)
+	box_panel.add_theme_stylebox_override("panel", flash_style)
+
+	await get_tree().create_timer(0.15).timeout
 
 func _play_spin_animation() -> void:
 	# Clear and rebuild strip with many items

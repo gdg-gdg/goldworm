@@ -103,8 +103,8 @@ func _ready() -> void:
 	_update_ui()
 
 func _balance_side_panels() -> void:
-	var left := get_node_or_null("MainHBox/LeftPanel")
-	var right := get_node_or_null("MainHBox/RightPanel")
+	var left := get_node_or_null("RootMargin/MainHBox/LeftPanel")
+	var right := get_node_or_null("RootMargin/MainHBox/RightPanel")
 	if left == null or right == null:
 		return
 
@@ -113,12 +113,23 @@ func _balance_side_panels() -> void:
 	right.custom_minimum_size.x = w
 
 func _build_ui() -> void:
-	# Main container
+	# Root MarginContainer for consistent padding at any resolution
+	var margin := MarginContainer.new()
+	margin.name = "RootMargin"
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	add_child(margin)
+
+	# Main container inside the margin
 	var main_hbox := HBoxContainer.new()
 	main_hbox.name = "MainHBox"
-	main_hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_hbox.add_theme_constant_override("separation", 20)
-	add_child(main_hbox)
+	margin.add_child(main_hbox)
 
 	# Left panel (player info + grid)
 	var left_panel := VBoxContainer.new()
@@ -142,7 +153,8 @@ func _build_ui() -> void:
 	
 	# Center panel (controls + status)
 	var center_panel := VBoxContainer.new()
-	center_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
 	center_panel.custom_minimum_size.x = 200
 	main_hbox.add_child(center_panel)
 	
@@ -306,22 +318,6 @@ func _build_case_overlay() -> void:
 	case_marker.offset_top = -60
 	case_marker.offset_bottom = 60
 	strip_area.add_child(case_marker)
-
-	# Top marker triangle
-	var marker_top := ColorRect.new()
-	marker_top.custom_minimum_size = Vector2(20, 20)
-	marker_top.color = Color(1, 0.8, 0.2)
-	marker_top.rotation = PI / 4
-	marker_top.position = Vector2(-10, -15)
-	case_marker.add_child(marker_top)
-
-	# Bottom marker triangle
-	var marker_bot := ColorRect.new()
-	marker_bot.custom_minimum_size = Vector2(20, 20)
-	marker_bot.color = Color(1, 0.8, 0.2)
-	marker_bot.rotation = PI / 4
-	marker_bot.position = Vector2(-10, 115)
-	case_marker.add_child(marker_bot)
 
 	# Build pool selection overlay
 	_build_pool_overlay()
