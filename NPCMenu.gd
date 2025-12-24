@@ -410,6 +410,11 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 	else:
 		is_owned = SaveManager.has_pattern(item["name"])
 
+	# Left margin spacer
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 8
+	row.add_child(spacer)
+
 	# Icon
 	var icon := Label.new()
 	icon.text = "🐛" if item["type"] == "worm" else "💥"
@@ -570,6 +575,11 @@ func _create_loadout_item_row(item_name: String, item_def: Dictionary, item_type
 
 	var rarity: String = item_def.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+
+	# Left margin spacer
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 8
+	row.add_child(spacer)
 
 	# Icon
 	var icon := Label.new()

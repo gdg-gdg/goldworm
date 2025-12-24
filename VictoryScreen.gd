@@ -274,21 +274,26 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 	var display_color := rarity_color.darkened(0.4) if is_owned else rarity_color
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 10)
 
 	if is_owned:
 		row.modulate.a = 0.5
 
-	# Shape preview
+	# Small margin/spacer at start
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 4
+	row.add_child(spacer)
+
+	# Shape preview - with proper centering
 	var shape_container := Control.new()
-	shape_container.custom_minimum_size = Vector2(60, 24)
+	shape_container.custom_minimum_size = Vector2(65, 24)
 	row.add_child(shape_container)
 	_draw_mini_shape(shape_container, item, display_color)
 
 	# Name
 	var name_label := Label.new()
 	name_label.text = item_name
-	name_label.custom_minimum_size.x = 90
+	name_label.custom_minimum_size.x = 85
 	name_label.add_theme_font_size_override("font_size", 13)
 	name_label.add_theme_color_override("font_color", display_color)
 	row.add_child(name_label)
@@ -385,20 +390,30 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	if should_dim:
 		panel.modulate = Color(0.6, 0.6, 0.6, 0.8)
 
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	panel.add_child(margin)
+
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 5)
-	panel.add_child(vbox)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
 
 	# Emoji icon
 	var icon := Label.new()
 	icon.text = "🐛" if item.get("type") == "worm" else "💥"
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	icon.add_theme_font_size_override("font_size", 36)
 	vbox.add_child(icon)
 
-	# Shape preview
+	# Shape preview - centered
 	var shape_container := Control.new()
-	shape_container.custom_minimum_size = Vector2(ITEM_WIDTH - 10, 50)
+	shape_container.custom_minimum_size = Vector2(ITEM_WIDTH - 16, 50)
+	shape_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(shape_container)
 	_draw_shape_preview(shape_container, item, display_color)
 
@@ -406,6 +421,7 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	var name_label := Label.new()
 	name_label.text = item.get("name", "???")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	name_label.add_theme_font_size_override("font_size", 11)
 	name_label.add_theme_color_override("font_color", display_color)
 	vbox.add_child(name_label)

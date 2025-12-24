@@ -142,9 +142,18 @@ func _create_item_panel(item_name: String, item_def: Dictionary, item_type: Stri
 	style.set_border_width_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 
+	# MarginContainer for proper padding
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_bottom", 6)
+	panel.add_child(margin)
+
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
 
 	# Rarity label
 	var rarity_label := Label.new()
@@ -157,9 +166,10 @@ func _create_item_panel(item_name: String, item_def: Dictionary, item_type: Stri
 		rarity_label.add_theme_color_override("font_color", Color(0.3, 0.3, 0.35))
 	vbox.add_child(rarity_label)
 
-	# Shape preview
+	# Shape preview - centered
 	var shape_container := Control.new()
 	shape_container.custom_minimum_size = Vector2(130, 80)
+	shape_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(shape_container)
 
 	if is_unlocked:
