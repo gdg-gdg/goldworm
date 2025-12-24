@@ -39,8 +39,12 @@ var worms_to_place: Array = []
 var current_worm_to_place: Dictionary = {}
 var placement_rotation: int = 0
 
+# Current NPC being fought (set by NPCMenu before entering battle)
+var current_npc_id: String = ""
+
 func _ready() -> void:
-	reset_game()
+	# Don't auto-reset, wait for scene to call reset_game
+	pass
 
 var worms_remaining_to_pick := 0  # How many worms player still needs to pick
 
@@ -53,13 +57,43 @@ func reset_game() -> void:
 	player_board = {"worms": [], "revealed": {}}
 	cpu_board = {"worms": [], "revealed": {}}
 
-	# Player will pick 2 worms through case openings
+	# Player picks 2 worms from their unlocked collection
 	worms_to_place = []
 	worms_remaining_to_pick = 2
 
 	current_worm_to_place = {}
 	_cpu_place_worms()
 	state_changed.emit()
+
+func get_player_available_worms() -> Array:
+	## Returns worms the player can choose from (their unlocked worms)
+	if SaveManager.current_slot < 0:
+		# No save loaded, use starter worms for testing
+		return ["Sprout", "Bean"]
+	return SaveManager.get_unlocked_worms()
+
+func get_player_available_patterns() -> Array:
+	## Returns patterns the player can use (their unlocked patterns + misses)
+	var patterns: Array = []
+
+	# Always include miss patterns
+	for p in PATTERN_DEFS:
+		if p.get("is_miss", false):
+			patterns.append(p)
+
+	# Add player's unlocked patterns
+	if SaveManager.current_slot < 0:
+		# No save loaded, use starter patterns for testing
+		for p in PATTERN_DEFS:
+			if p.get("pool") == "starter" and not p.get("is_miss", false):
+				patterns.append(p)
+	else:
+		var unlocked := SaveManager.get_unlocked_patterns()
+		for p in PATTERN_DEFS:
+			if p.get("name", "") in unlocked:
+				patterns.append(p)
+
+	return patterns
 
 func _cpu_place_worms() -> void:
 	# Randomly select 2 worms for CPU from pool

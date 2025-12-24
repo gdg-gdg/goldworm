@@ -11,12 +11,13 @@ config_version=5
 [application]
 
 config/name="Garden Nukes vs Worms"
-run/main_scene="res://Main.tscn"
+run/main_scene="res://StartMenu.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
+SaveManager="*res://SaveManager.gd"
 GameState="*res://GameState.gd"
 
 [display]

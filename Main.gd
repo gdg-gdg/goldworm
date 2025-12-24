@@ -87,6 +87,7 @@ var won_worm_instances: Dictionary = {}  # Stores won worm defs by name (with ro
 # =============================================================================
 
 func _ready() -> void:
+	GameState.reset_game()
 	_build_ui()
 	_connect_signals()
 	_update_ui()
@@ -484,21 +485,26 @@ func _generate_random_pool() -> Array:
 	return pool
 
 func _pick_weighted_pattern() -> Dictionary:
+	# Use player's available patterns (unlocked ones + misses)
+	var available_patterns := GameState.get_player_available_patterns()
+
 	# Calculate total weight
 	var total_weight := 0.0
-	for pattern in GameState.PATTERN_DEFS:
+	for pattern in available_patterns:
 		total_weight += pattern.get("weight", 1.0)
 
 	# Pick random value
 	var roll := randf() * total_weight
 	var cumulative := 0.0
 
-	for pattern in GameState.PATTERN_DEFS:
+	for pattern in available_patterns:
 		cumulative += pattern.get("weight", 1.0)
 		if roll <= cumulative:
 			return pattern
 
 	# Fallback
+	if available_patterns.size() > 0:
+		return available_patterns[0]
 	return GameState.PATTERN_DEFS[0]
 
 func _show_pool_selection() -> void:
@@ -578,9 +584,12 @@ func _generate_random_worm_pool() -> Array:
 	return pool
 
 func _pick_weighted_worm() -> Dictionary:
+	# Use player's available worms (their unlocked collection)
+	var available_worms := GameState.get_player_available_worms()
+
 	# Calculate total weight
 	var total_weight := 0.0
-	for worm_name in GameState.WORM_POOL:
+	for worm_name in available_worms:
 		var worm_def: Dictionary = GameState.WORM_DEFS[worm_name]
 		total_weight += worm_def.get("weight", 1.0)
 
@@ -588,13 +597,15 @@ func _pick_weighted_worm() -> Dictionary:
 	var roll := randf() * total_weight
 	var cumulative := 0.0
 
-	for worm_name in GameState.WORM_POOL:
+	for worm_name in available_worms:
 		var worm_def: Dictionary = GameState.WORM_DEFS[worm_name]
 		cumulative += worm_def.get("weight", 1.0)
 		if roll <= cumulative:
 			return worm_def
 
 	# Fallback
+	if available_worms.size() > 0:
+		return GameState.WORM_DEFS[available_worms[0]]
 	return GameState.WORM_DEFS[GameState.WORM_POOL[0]]
 
 func _show_worm_pool_selection() -> void:
@@ -1626,8 +1637,14 @@ func _on_game_over(winner: GameState.Owner) -> void:
 		status_label.text = "VICTORY!\nYou destroyed all enemy worms!"
 		roll_label.text = "YOU WIN!"
 		roll_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
+		# Transition to victory screen after a delay
+		await get_tree().create_timer(2.0).timeout
+		get_tree().change_scene_to_file("res://VictoryScreen.tscn")
 	else:
 		status_label.text = "DEFEAT!\nAll your worms were destroyed!"
 		roll_label.text = "GAME OVER"
 		roll_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+		# Return to NPC menu after a delay
+		await get_tree().create_timer(2.0).timeout
+		get_tree().change_scene_to_file("res://NPCMenu.tscn")
 	incoming_label.text = ""
