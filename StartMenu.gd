@@ -330,20 +330,87 @@ func _on_name_cancelled() -> void:
 	name_input_popup = null
 	pending_slot = -1
 
-func _on_slot_delete(slot_index: int) -> void:
-	# Show confirmation dialog
-	var dialog := ConfirmationDialog.new()
-	dialog.title = "Delete Save"
-	dialog.dialog_text = "Are you sure you want to delete Save Slot %d?\nThis cannot be undone!" % (slot_index + 1)
-	dialog.confirmed.connect(_confirm_delete.bind(slot_index, dialog))
-	dialog.canceled.connect(dialog.queue_free)
-	add_child(dialog)
-	dialog.popup_centered()
+var delete_popup: Control
+var delete_slot_pending: int = -1
 
-func _confirm_delete(slot_index: int, dialog: ConfirmationDialog) -> void:
-	SaveManager.delete_save(slot_index)
-	dialog.queue_free()
+func _on_slot_delete(slot_index: int) -> void:
+	delete_slot_pending = slot_index
+	_show_delete_popup(slot_index)
+
+func _show_delete_popup(slot_index: int) -> void:
+	# Create overlay
+	delete_popup = ColorRect.new()
+	delete_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	delete_popup.color = Color(0, 0, 0, 0.7)
+	add_child(delete_popup)
+
+	# Center container
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	delete_popup.add_child(center)
+
+	# Popup panel
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(400, 180)
+	center.add_child(panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.6, 0.3, 0.3)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 20)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	title.text = "Delete Save"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_title(title, 24)
+	vbox.add_child(title)
+
+	# Warning text
+	var warning := Label.new()
+	warning.text = "Are you sure you want to delete Save Slot %d?\nThis cannot be undone!" % (slot_index + 1)
+	warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(warning, 16, Color(0.9, 0.7, 0.7))
+	vbox.add_child(warning)
+
+	# Buttons row
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 20)
+	vbox.add_child(btn_row)
+
+	var delete_btn := Button.new()
+	delete_btn.text = "Delete"
+	delete_btn.custom_minimum_size = Vector2(120, 40)
+	delete_btn.pressed.connect(_confirm_delete)
+	Fonts.apply_button(delete_btn, 16)
+	btn_row.add_child(delete_btn)
+
+	var cancel_btn := Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(120, 40)
+	cancel_btn.pressed.connect(_cancel_delete)
+	Fonts.apply_button(cancel_btn, 16)
+	btn_row.add_child(cancel_btn)
+
+func _confirm_delete() -> void:
+	SaveManager.delete_save(delete_slot_pending)
+	delete_popup.queue_free()
+	delete_popup = null
+	delete_slot_pending = -1
 	_update_slots()
+
+func _cancel_delete() -> void:
+	delete_popup.queue_free()
+	delete_popup = null
+	delete_slot_pending = -1
 
 func _on_quit() -> void:
 	get_tree().quit()

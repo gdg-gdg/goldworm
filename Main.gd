@@ -383,7 +383,7 @@ func _build_worm_pool_overlay() -> void:
 
 func _create_worm_pool_option(index: int) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(250, 300)
+	panel.custom_minimum_size = Vector2(280, 320)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.15, 0.1)
@@ -392,9 +392,17 @@ func _create_worm_pool_option(index: int) -> PanelContainer:
 	style.set_border_width_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 
+	# Add margin for padding inside panel
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 15)
+	margin.add_theme_constant_override("margin_right", 15)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
+	margin.add_child(vbox)
 
 	# Case label
 	var case_label := Label.new()
@@ -407,6 +415,7 @@ func _create_worm_pool_option(index: int) -> PanelContainer:
 	var preview_container := VBoxContainer.new()
 	preview_container.add_theme_constant_override("separation", 6)
 	preview_container.set_meta("preview_container", true)
+	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(preview_container)
 
 	# Make it clickable
@@ -459,7 +468,7 @@ func _build_pool_overlay() -> void:
 
 func _create_pool_option(index: int) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(250, 300)
+	panel.custom_minimum_size = Vector2(280, 320)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18)
@@ -468,9 +477,17 @@ func _create_pool_option(index: int) -> PanelContainer:
 	style.set_border_width_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 
+	# Add margin for padding inside panel
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 15)
+	margin.add_theme_constant_override("margin_right", 15)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
+	margin.add_child(vbox)
 
 	# Case label
 	var case_label := Label.new()
@@ -483,6 +500,7 @@ func _create_pool_option(index: int) -> PanelContainer:
 	var preview_container := VBoxContainer.new()
 	preview_container.add_theme_constant_override("separation", 6)
 	preview_container.set_meta("preview_container", true)
+	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(preview_container)
 
 	# Make it clickable
@@ -587,8 +605,9 @@ func _show_pool_selection() -> void:
 		var panel: PanelContainer = pool_options[i]
 		panel.set_meta("pool", pools[i])
 
-		# Find the preview container
-		var vbox: VBoxContainer = panel.get_child(0)
+		# Find the preview container (panel -> margin -> vbox -> preview_container)
+		var margin: MarginContainer = panel.get_child(0)
+		var vbox: VBoxContainer = margin.get_child(0)
 		var preview_container: VBoxContainer = null
 		for child in vbox.get_children():
 			if child.has_meta("preview_container"):
@@ -600,27 +619,49 @@ func _show_pool_selection() -> void:
 			for child in preview_container.get_children():
 				child.queue_free()
 
+			# Calculate percentage (equal chance for each item)
+			var pool_size: int = pools[i].size()
+			var chance: float = 100.0 / float(pool_size) if pool_size > 0 else 0.0
+
 			# Add pattern previews
 			for pattern in pools[i]:
 				var row := HBoxContainer.new()
-				row.add_theme_constant_override("separation", 8)
+				row.add_theme_constant_override("separation", 6)
 
-				# Shape visual
-				var shape := _create_shape_visual(pattern, 8.0)
-				row.add_child(shape)
+				# Percentage chance - fixed width column
+				var chance_label := Label.new()
+				if chance >= 10.0:
+					chance_label.text = "%d%%" % int(chance)
+				else:
+					chance_label.text = "%.1f%%" % chance
+				chance_label.custom_minimum_size.x = 38
+				chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				Fonts.apply_body(chance_label, 11, Color(0.7, 0.7, 0.5))
+				row.add_child(chance_label)
 
-				# Pattern name with rarity color
+				# Shape visual - fixed width container for alignment
+				var shape_wrapper := Control.new()
+				shape_wrapper.custom_minimum_size = Vector2(60, 24)
+				row.add_child(shape_wrapper)
+				var shape := _create_shape_visual(pattern, 7.0)
+				shape_wrapper.add_child(shape)
+
+				# Pattern name with rarity color - fixed width
 				var name_label := Label.new()
 				name_label.text = pattern["name"]
-				Fonts.apply_body(name_label, 14, _get_rarity_color(pattern["cells"].size()))
+				name_label.custom_minimum_size.x = 90
+				Fonts.apply_body(name_label, 13, _get_rarity_color(pattern["cells"].size()))
 				row.add_child(name_label)
 
-				# Rotatable label in gold
+				# Rotatable indicator - fixed width
+				var rot_label := Label.new()
+				rot_label.custom_minimum_size.x = 16
 				if pattern.get("rotatable", false):
-					var rot_label := Label.new()
-					rot_label.text = "Rotatable"
-					Fonts.apply_body(rot_label, 12, Color(1.0, 0.85, 0.2))
-					row.add_child(rot_label)
+					rot_label.text = "R"
+					Fonts.apply_body(rot_label, 11, Color(1.0, 0.85, 0.2))
+				else:
+					rot_label.text = ""
+				row.add_child(rot_label)
 
 				preview_container.add_child(row)
 
@@ -686,8 +727,9 @@ func _show_worm_pool_selection() -> void:
 		var panel: PanelContainer = worm_pool_options[i]
 		panel.set_meta("pool", pools[i])
 
-		# Find the preview container
-		var vbox: VBoxContainer = panel.get_child(0)
+		# Find the preview container (panel -> margin -> vbox -> preview_container)
+		var margin: MarginContainer = panel.get_child(0)
+		var vbox: VBoxContainer = margin.get_child(0)
 		var preview_container: VBoxContainer = null
 		for child in vbox.get_children():
 			if child.has_meta("preview_container"):
@@ -699,27 +741,49 @@ func _show_worm_pool_selection() -> void:
 			for child in preview_container.get_children():
 				child.queue_free()
 
+			# Calculate percentage (equal chance for each item)
+			var pool_size: int = pools[i].size()
+			var chance: float = 100.0 / float(pool_size) if pool_size > 0 else 0.0
+
 			# Add worm previews
 			for worm_def in pools[i]:
 				var row := HBoxContainer.new()
-				row.add_theme_constant_override("separation", 8)
+				row.add_theme_constant_override("separation", 6)
 
-				# Shape visual
-				var shape := _create_shape_visual(worm_def, 8.0)
-				row.add_child(shape)
+				# Percentage chance - fixed width column
+				var chance_label := Label.new()
+				if chance >= 10.0:
+					chance_label.text = "%d%%" % int(chance)
+				else:
+					chance_label.text = "%.1f%%" % chance
+				chance_label.custom_minimum_size.x = 38
+				chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				Fonts.apply_body(chance_label, 11, Color(0.7, 0.7, 0.5))
+				row.add_child(chance_label)
 
-				# Worm name with rarity color
+				# Shape visual - fixed width container for alignment
+				var shape_wrapper := Control.new()
+				shape_wrapper.custom_minimum_size = Vector2(60, 24)
+				row.add_child(shape_wrapper)
+				var shape := _create_shape_visual(worm_def, 7.0)
+				shape_wrapper.add_child(shape)
+
+				# Worm name with rarity color - fixed width
 				var name_label := Label.new()
 				name_label.text = worm_def["name"]
-				Fonts.apply_body(name_label, 14, _get_rarity_color(worm_def["cells"].size()))
+				name_label.custom_minimum_size.x = 90
+				Fonts.apply_body(name_label, 13, _get_rarity_color(worm_def["cells"].size()))
 				row.add_child(name_label)
 
-				# Rotatable label in gold
+				# Rotatable indicator - fixed width
+				var rot_label := Label.new()
+				rot_label.custom_minimum_size.x = 16
 				if worm_def.get("rotatable", false):
-					var rot_label := Label.new()
-					rot_label.text = "Rotatable"
-					Fonts.apply_body(rot_label, 12, Color(1.0, 0.85, 0.2))
-					row.add_child(rot_label)
+					rot_label.text = "R"
+					Fonts.apply_body(rot_label, 11, Color(1.0, 0.85, 0.2))
+				else:
+					rot_label.text = ""
+				row.add_child(rot_label)
 
 				preview_container.add_child(row)
 

@@ -275,3 +275,24 @@ static func _get_rarity_weight(rarity: String) -> int:
 		"legendary": return 1
 		"mythic": return 1
 	return 5
+
+static func get_loot_chances(npc_id: String) -> Dictionary:
+	## Calculate drop chance percentage for each item in the loot pool
+	## Returns { "item_name": percentage }
+	var pool := get_npc_loot_pool(npc_id)
+	if pool.is_empty():
+		return {}
+
+	# Calculate total weight
+	var total_weight := 0
+	for item in pool:
+		total_weight += _get_rarity_weight(item["rarity"])
+
+	# Calculate percentage for each item
+	var chances: Dictionary = {}
+	for item in pool:
+		var weight := _get_rarity_weight(item["rarity"])
+		var percentage := (float(weight) / float(total_weight)) * 100.0
+		chances[item["name"]] = percentage
+
+	return chances

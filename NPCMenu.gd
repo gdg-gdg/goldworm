@@ -307,6 +307,8 @@ func _on_back() -> void:
 func _on_collection() -> void:
 	get_tree().change_scene_to_file("res://CollectionScreen.tscn")
 
+var current_drops_chances: Dictionary = {}
+
 func _on_view_drops(npc_id: String) -> void:
 	# Close existing popup if any
 	if drops_popup != null:
@@ -315,6 +317,7 @@ func _on_view_drops(npc_id: String) -> void:
 
 	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
 	var loot_pool := NPCDefs.get_npc_loot_pool(npc_id)
+	current_drops_chances = NPCDefs.get_loot_chances(npc_id)
 
 	# Create popup overlay
 	drops_popup = ColorRect.new()
@@ -403,8 +406,10 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 
+	var item_name: String = item.get("name", "???")
 	var rarity: String = item.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var chance: float = current_drops_chances.get(item_name, 0.0)
 	var is_owned := false
 
 	if item["type"] == "worm":
@@ -417,11 +422,16 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 	spacer.custom_minimum_size.x = 8
 	row.add_child(spacer)
 
-	# Icon
-	var icon := Label.new()
-	icon.text = "🐛" if item["type"] == "worm" else "💥"
-	Fonts.apply_body(icon, 16, Color.WHITE)
-	row.add_child(icon)
+	# Percentage chance
+	var chance_label := Label.new()
+	if chance >= 10.0:
+		chance_label.text = "%d%%" % int(chance)
+	else:
+		chance_label.text = "%.1f%%" % chance
+	chance_label.custom_minimum_size.x = 45
+	chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(chance_label, 12, Color(0.7, 0.7, 0.5))
+	row.add_child(chance_label)
 
 	# Shape preview
 	var cells: Array = []

@@ -21,6 +21,7 @@ var npc_id: String = ""
 var loot_item: Dictionary = {}
 var case_opened := false
 var loot_pool: Array = []
+var loot_chances: Dictionary = {}
 
 # UI references
 var title_label: Label
@@ -39,6 +40,7 @@ var main_vbox: VBoxContainer
 func _ready() -> void:
 	npc_id = GameState.current_npc_id
 	loot_pool = NPCDefs.get_npc_loot_pool(npc_id)
+	loot_chances = NPCDefs.get_loot_chances(npc_id)
 	_build_ui()
 
 func _build_ui() -> void:
@@ -266,12 +268,13 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 	var rarity: String = item.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
 	var is_owned := _is_item_owned(item)
+	var chance: float = loot_chances.get(item_name, 0.0)
 
 	# Dim if owned
 	var display_color := rarity_color.darkened(0.4) if is_owned else rarity_color
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 8)
 
 	if is_owned:
 		row.modulate.a = 0.5
@@ -281,17 +284,28 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 	spacer.custom_minimum_size.x = 4
 	row.add_child(spacer)
 
+	# Percentage chance
+	var chance_label := Label.new()
+	if chance >= 10.0:
+		chance_label.text = "%d%%" % int(chance)
+	else:
+		chance_label.text = "%.1f%%" % chance
+	chance_label.custom_minimum_size.x = 40
+	chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(chance_label, 11, Color(0.7, 0.7, 0.5))
+	row.add_child(chance_label)
+
 	# Shape preview - with proper centering
 	var shape_container := Control.new()
-	shape_container.custom_minimum_size = Vector2(65, 24)
+	shape_container.custom_minimum_size = Vector2(55, 24)
 	row.add_child(shape_container)
 	_draw_mini_shape(shape_container, item, display_color)
 
 	# Name
 	var name_label := Label.new()
 	name_label.text = item_name
-	name_label.custom_minimum_size.x = 85
-	Fonts.apply_body(name_label, 13, display_color)
+	name_label.custom_minimum_size.x = 75
+	Fonts.apply_body(name_label, 12, display_color)
 	row.add_child(name_label)
 
 	# Rarity badge
@@ -365,8 +379,10 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(ITEM_WIDTH, ITEM_HEIGHT)
 
+	var item_name: String = item.get("name", "???")
 	var rarity: String = item.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var chance: float = loot_chances.get(item_name, 0.0)
 	var is_owned := _is_item_owned(item)
 	var should_dim := dim_if_owned and is_owned
 
@@ -392,17 +408,29 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	panel.add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 5)
+	vbox.add_theme_constant_override("separation", 3)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	margin.add_child(vbox)
 
-	# Emoji icon
+	# Top row: emoji and percentage
+	var top_row := HBoxContainer.new()
+	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(top_row)
+
+	# Emoji icon - don't apply custom font so emoji renders properly
 	var icon := Label.new()
 	icon.text = "🐛" if item.get("type") == "worm" else "💥"
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	Fonts.apply_body(icon, 36, Color.WHITE)
-	vbox.add_child(icon)
+	icon.add_theme_font_size_override("font_size", 20)
+	top_row.add_child(icon)
+
+	var chance_label := Label.new()
+	if chance >= 10.0:
+		chance_label.text = "%d%%" % int(chance)
+	else:
+		chance_label.text = "%.1f%%" % chance
+	Fonts.apply_body(chance_label, 12, Color(0.9, 0.85, 0.5))
+	top_row.add_child(chance_label)
 
 	# Shape preview - centered
 	var shape_container := Control.new()
@@ -413,7 +441,7 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 
 	# Name
 	var name_label := Label.new()
-	name_label.text = item.get("name", "???")
+	name_label.text = item_name
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	Fonts.apply_body(name_label, 11, display_color)
