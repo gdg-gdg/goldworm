@@ -263,6 +263,8 @@ func _update_npcs() -> void:
 		var desc_label: Label = panel.find_child("DescLabel", true, false)
 		var status_label: Label = panel.find_child("StatusLabel", true, false)
 		var fight_btn: Button = panel.find_child("FightBtn", true, false)
+		var drops_btn: Button = panel.find_child("DropsBtn", true, false)
+		var loadout_btn: Button = panel.find_child("LoadoutBtn", true, false)
 		var portrait_label: Label = panel.get_meta("portrait_label")
 		var style: StyleBoxFlat = panel.get_meta("style")
 
@@ -272,6 +274,8 @@ func _update_npcs() -> void:
 			status_label.text = ""
 			fight_btn.disabled = false
 			fight_btn.text = "Fight!"
+			drops_btn.disabled = false
+			loadout_btn.disabled = false
 			portrait_label.text = npc.get("name", "?")[0]
 			portrait_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
 			style.border_color = Color(0.4, 0.7, 0.4)
@@ -282,6 +286,8 @@ func _update_npcs() -> void:
 			status_label.add_theme_color_override("font_color", Color(0.8, 0.5, 0.3))
 			fight_btn.disabled = true
 			fight_btn.text = "Locked"
+			drops_btn.disabled = true
+			loadout_btn.disabled = true
 			portrait_label.text = "?"
 			portrait_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 			style.border_color = Color(0.3, 0.3, 0.4)
@@ -313,12 +319,15 @@ func _on_view_drops(npc_id: String) -> void:
 	drops_popup.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(drops_popup)
 
-	# Main container
+	# CenterContainer wrapper for proper centering
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	drops_popup.add_child(center)
+
+	# Main container - no manual position offset needed
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(500, 400)
-	panel.position = Vector2(-250, -200)
-	drops_popup.add_child(panel)
+	center.add_child(panel)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18)
@@ -474,12 +483,15 @@ func _on_view_loadout(npc_id: String) -> void:
 	loadout_popup.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(loadout_popup)
 
-	# Main container
+	# CenterContainer wrapper for proper centering
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	loadout_popup.add_child(center)
+
+	# Main container - no manual position offset needed
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(550, 500)
-	panel.position = Vector2(-275, -250)
-	loadout_popup.add_child(panel)
+	center.add_child(panel)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18)

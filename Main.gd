@@ -62,6 +62,7 @@ var skip_roll := false
 var case_overlay: ColorRect
 var case_container: Control
 var case_strip: HBoxContainer
+var case_strip_clip: Control  # The clipping container for the strip
 var case_marker: ColorRect
 var case_items: Array = []
 const CASE_ITEM_WIDTH := 120
@@ -70,13 +71,19 @@ const CASE_ITEM_COUNT := 40  # Total items in strip
 # Pool selection UI (for attack patterns)
 var pool_overlay: ColorRect
 var pool_container: VBoxContainer
+var pool_center: CenterContainer  # CenterContainer wrapper
 var pool_options: Array = []  # The two pool buttons
 var selected_pool: Array = []  # The chosen pool of patterns
 var pool_selected := false
 
+# StyleBox cache system (avoids per-cell allocation)
+var _cell_styles: Dictionary = {}  # key: color.to_html() -> { normal, hover, pressed }
+var _cell_last_state: Dictionary = {}  # key: cell instance ID -> last color hash
+
 # Worm pool selection UI
 var worm_pool_overlay: ColorRect
 var worm_pool_container: VBoxContainer
+var worm_pool_center: CenterContainer  # CenterContainer wrapper
 var worm_pool_options: Array = []
 var selected_worm_pool: Array = []
 var worm_pool_selected := false
@@ -90,18 +97,32 @@ var won_worm_instances: Dictionary = {}  # Stores won worm defs by name (with ro
 func _ready() -> void:
 	GameState.reset_game()
 	_build_ui()
+	await get_tree().process_frame  # Let containers compute sizes
+	_balance_side_panels()
 	_connect_signals()
 	_update_ui()
+
+func _balance_side_panels() -> void:
+	var left := get_node_or_null("MainHBox/LeftPanel")
+	var right := get_node_or_null("MainHBox/RightPanel")
+	if left == null or right == null:
+		return
+
+	var w := maxi(int(left.get_combined_minimum_size().x), int(right.get_combined_minimum_size().x))
+	left.custom_minimum_size.x = w
+	right.custom_minimum_size.x = w
 
 func _build_ui() -> void:
 	# Main container
 	var main_hbox := HBoxContainer.new()
+	main_hbox.name = "MainHBox"
 	main_hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_hbox.add_theme_constant_override("separation", 20)
 	add_child(main_hbox)
-	
+
 	# Left panel (player info + grid)
 	var left_panel := VBoxContainer.new()
+	left_panel.name = "LeftPanel"
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_hbox.add_child(left_panel)
 	
@@ -198,6 +219,7 @@ func _build_ui() -> void:
 
 	# Right panel (cpu info + grid)
 	var right_panel := VBoxContainer.new()
+	right_panel.name = "RightPanel"
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_hbox.add_child(right_panel)
 	
@@ -232,43 +254,65 @@ func _build_case_overlay() -> void:
 	case_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	case_overlay.add_child(case_container)
 
+	# Main VBox for vertical layout
+	var main_vbox := VBoxContainer.new()
+	main_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.add_theme_constant_override("separation", 20)
+	case_container.add_child(main_vbox)
+
+	# Spacer at top
+	var top_spacer := Control.new()
+	top_spacer.custom_minimum_size.y = 60
+	main_vbox.add_child(top_spacer)
+
 	# Title label
 	var title := Label.new()
 	title.text = "ROLLING STRIKE PATTERN"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.position.y = 80
 	title.add_theme_font_size_override("font_size", 28)
 	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
-	case_container.add_child(title)
+	main_vbox.add_child(title)
 
-	# Strip container with clip (masks overflow)
-	var strip_clip := Control.new()
-	strip_clip.clip_contents = true
-	strip_clip.custom_minimum_size = Vector2(600, 100)
-	strip_clip.set_anchors_preset(Control.PRESET_CENTER)
-	strip_clip.position = Vector2(-300, -50)
-	case_container.add_child(strip_clip)
+	# Strip area with marker overlay
+	var strip_area := Control.new()
+	strip_area.custom_minimum_size = Vector2(600, 120)
+	strip_area.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(strip_area)
+
+	# Strip container with clip (masks overflow) - centered in strip_area
+	case_strip_clip = Control.new()
+	case_strip_clip.clip_contents = true
+	case_strip_clip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	case_strip_clip.offset_top = 10
+	case_strip_clip.offset_bottom = -10
+	strip_area.add_child(case_strip_clip)
 
 	# The scrolling strip
 	case_strip = HBoxContainer.new()
 	case_strip.add_theme_constant_override("separation", 8)
-	strip_clip.add_child(case_strip)
+	case_strip_clip.add_child(case_strip)
 
-	# Center marker (arrow/line indicator)
+	# Center marker (arrow/line indicator) - positioned relative to strip_area
 	case_marker = ColorRect.new()
 	case_marker.custom_minimum_size = Vector2(4, 120)
 	case_marker.color = Color(1, 0.8, 0.2)
-	case_marker.set_anchors_preset(Control.PRESET_CENTER)
-	case_marker.position = Vector2(-2, -60)
-	case_container.add_child(case_marker)
+	case_marker.anchor_left = 0.5
+	case_marker.anchor_right = 0.5
+	case_marker.anchor_top = 0.5
+	case_marker.anchor_bottom = 0.5
+	case_marker.offset_left = -2
+	case_marker.offset_right = 2
+	case_marker.offset_top = -60
+	case_marker.offset_bottom = 60
+	strip_area.add_child(case_marker)
 
 	# Top marker triangle
 	var marker_top := ColorRect.new()
 	marker_top.custom_minimum_size = Vector2(20, 20)
 	marker_top.color = Color(1, 0.8, 0.2)
 	marker_top.rotation = PI / 4
-	marker_top.position = Vector2(-10, -75)
+	marker_top.position = Vector2(-10, -15)
 	case_marker.add_child(marker_top)
 
 	# Bottom marker triangle
@@ -292,13 +336,16 @@ func _build_worm_pool_overlay() -> void:
 	worm_pool_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(worm_pool_overlay)
 
-	# Main container
+	# CenterContainer wrapper for proper centering
+	worm_pool_center = CenterContainer.new()
+	worm_pool_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	worm_pool_overlay.add_child(worm_pool_center)
+
+	# Main container - no manual position offset needed
 	worm_pool_container = VBoxContainer.new()
-	worm_pool_container.set_anchors_preset(Control.PRESET_CENTER)
-	worm_pool_container.position = Vector2(-300, -200)
 	worm_pool_container.custom_minimum_size = Vector2(600, 400)
 	worm_pool_container.add_theme_constant_override("separation", 30)
-	worm_pool_overlay.add_child(worm_pool_container)
+	worm_pool_center.add_child(worm_pool_container)
 
 	# Title
 	var title := Label.new()
@@ -367,13 +414,16 @@ func _build_pool_overlay() -> void:
 	pool_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(pool_overlay)
 
-	# Main container
+	# CenterContainer wrapper for proper centering
+	pool_center = CenterContainer.new()
+	pool_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pool_overlay.add_child(pool_center)
+
+	# Main container - no manual position offset needed
 	pool_container = VBoxContainer.new()
-	pool_container.set_anchors_preset(Control.PRESET_CENTER)
-	pool_container.position = Vector2(-300, -200)
 	pool_container.custom_minimum_size = Vector2(600, 400)
 	pool_container.add_theme_constant_override("separation", 30)
-	pool_overlay.add_child(pool_container)
+	pool_center.add_child(pool_container)
 
 	# Title
 	var title := Label.new()
@@ -692,37 +742,34 @@ func _play_worm_roll_animation() -> void:
 	# Show overlay
 	case_overlay.visible = true
 
-	# Update title
-	var title_label: Label = case_container.get_child(0)
+	# Update title (find it in the VBox structure)
+	var main_vbox: VBoxContainer = case_container.get_child(0)
+	var title_label: Label = main_vbox.get_child(1)  # After spacer
 	title_label.text = "ROLLING WORM"
 	title_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
 
 	roll_label.text = "..."
 
-	# Calculate target position (winner should land under marker)
+	# Wait a frame for sizes to be calculated
+	await get_tree().process_frame
+
+	# Calculate target position using actual clip size
 	var winner_index := CASE_ITEM_COUNT - 5
 	var item_total_width := CASE_ITEM_WIDTH + 8
-	var strip_center := 300.0
-	var target_x := -(winner_index * item_total_width) + strip_center - (CASE_ITEM_WIDTH / 2.0)
-	target_x += randf_range(-30, 30)
+	var clip_center := case_strip_clip.size.x * 0.5
+	var item_center := float(winner_index) * item_total_width + CASE_ITEM_WIDTH * 0.5
+	var target_x := clip_center - item_center + randf_range(-30, 30)
 
-	# Starting position
-	var start_x := 200.0
+	# Starting position (off to the right)
+	var start_x := case_strip_clip.size.x * 0.3
 	case_strip.position.x = start_x
 
-	# Animate over 3.5 seconds
-	var duration := 3.5
-	var elapsed := 0.0
-	var tick := 0.016
-
-	while elapsed < duration:
-		elapsed += tick
-		var t := elapsed / duration
-		var eased_t := 1.0 - pow(1.0 - t, 3.0)
-		case_strip.position.x = lerp(start_x, target_x, eased_t)
-		await get_tree().create_timer(tick).timeout
-
-	case_strip.position.x = target_x
+	# Animate using Tween (frame-rate independent)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(case_strip, "position:x", target_x, 3.5)
+	await tween.finished
 
 	# Flash the winning item
 	var worm_rarity := _get_rarity_color(winning_worm["cells"].size())
@@ -1103,37 +1150,26 @@ func _play_roll_animation() -> void:
 	case_overlay.visible = true
 	roll_label.text = "..."
 
-	# Calculate target position (winner should land under marker)
-	# Winner is at index CASE_ITEM_COUNT - 5 (near end but not last)
+	# Wait a frame for sizes to be calculated
+	await get_tree().process_frame
+
+	# Calculate target position using actual clip size
 	var winner_index := CASE_ITEM_COUNT - 5
 	var item_total_width := CASE_ITEM_WIDTH + 8  # width + separation
-	var strip_center := 300.0  # half of clip width
-	var target_x := -(winner_index * item_total_width) + strip_center - (CASE_ITEM_WIDTH / 2.0)
-
-	# Add some randomness to final position (within the winning item)
-	target_x += randf_range(-30, 30)
+	var clip_center := case_strip_clip.size.x * 0.5
+	var item_center := float(winner_index) * item_total_width + CASE_ITEM_WIDTH * 0.5
+	var target_x := clip_center - item_center + randf_range(-30, 30)
 
 	# Starting position (off to the right)
-	var start_x := 200.0
+	var start_x := case_strip_clip.size.x * 0.3
 	case_strip.position.x = start_x
 
-	# Animate over 3.5 seconds with easing
-	var duration := 3.5
-	var elapsed := 0.0
-	var tick := 0.016  # ~60fps
-
-	while elapsed < duration:
-		elapsed += tick
-		var t := elapsed / duration
-
-		# Cubic ease out: 1 - (1-t)^3
-		var eased_t := 1.0 - pow(1.0 - t, 3.0)
-
-		case_strip.position.x = lerp(start_x, target_x, eased_t)
-		await get_tree().create_timer(tick).timeout
-
-	# Ensure final position
-	case_strip.position.x = target_x
+	# Animate using Tween (frame-rate independent)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(case_strip, "position:x", target_x, 3.5)
+	await tween.finished
 
 	# Flash the winning item
 	var cell_count: int = winning_pattern.get("cells", []).size()
@@ -1617,29 +1653,49 @@ func _update_cpu_grid() -> void:
 
 		_style_cell(cell, color, text)
 
+func _get_or_create_cell_styles(color: Color) -> Dictionary:
+	## Returns cached StyleBoxes for a color, creating them if needed
+	var key := color.to_html()
+	if _cell_styles.has(key):
+		return _cell_styles[key]
+
+	# Create new StyleBoxes for this color
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = color
+	normal.set_corner_radius_all(4)
+	normal.border_color = color.lightened(0.15)
+	normal.set_border_width_all(1)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = color.lightened(0.12)
+	hover.set_corner_radius_all(4)
+	hover.border_color = Color(0.8, 0.8, 0.9)
+	hover.set_border_width_all(2)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = color.darkened(0.1)
+	pressed.set_corner_radius_all(4)
+
+	var styles := { "normal": normal, "hover": hover, "pressed": pressed }
+	_cell_styles[key] = styles
+	return styles
+
 func _style_cell(cell: Button, color: Color, text: String) -> void:
-	var stylebox := StyleBoxFlat.new()
-	stylebox.bg_color = color
-	stylebox.set_corner_radius_all(4)
-	stylebox.border_color = color.lightened(0.15)
-	stylebox.set_border_width_all(1)
-	cell.add_theme_stylebox_override("normal", stylebox)
+	var key := color.to_html()
+	var cell_id := cell.get_instance_id()
+	var last_key: String = _cell_last_state.get(cell_id, "")
 
-	var hover_style := StyleBoxFlat.new()
-	hover_style.bg_color = color.lightened(0.12)
-	hover_style.set_corner_radius_all(4)
-	hover_style.border_color = Color(0.8, 0.8, 0.9)
-	hover_style.set_border_width_all(2)
-	cell.add_theme_stylebox_override("hover", hover_style)
+	# Only update StyleBoxes if color changed
+	if key != last_key:
+		var styles := _get_or_create_cell_styles(color)
+		cell.add_theme_stylebox_override("normal", styles["normal"])
+		cell.add_theme_stylebox_override("hover", styles["hover"])
+		cell.add_theme_stylebox_override("pressed", styles["pressed"])
+		_cell_last_state[cell_id] = key
 
-	var pressed_style := StyleBoxFlat.new()
-	pressed_style.bg_color = color.darkened(0.1)
-	pressed_style.set_corner_radius_all(4)
-	cell.add_theme_stylebox_override("pressed", pressed_style)
-
-	cell.text = text
-	cell.add_theme_font_size_override("font_size", 16)
-	cell.add_theme_color_override("font_color", Color.WHITE)
+	# Always update text (cheap operation)
+	if cell.text != text:
+		cell.text = text
 
 # =============================================================================
 # EVENT HANDLERS

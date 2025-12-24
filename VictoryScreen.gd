@@ -43,15 +43,16 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# Main container
+	# CenterContainer wrapper for proper centering
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	# Main container - no manual position offset needed
 	var main_vbox := VBoxContainer.new()
-	main_vbox.set_anchors_preset(Control.PRESET_CENTER)
-	main_vbox.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	main_vbox.grow_vertical = Control.GROW_DIRECTION_BOTH
 	main_vbox.add_theme_constant_override("separation", 20)
-	main_vbox.position = Vector2(-400, -250)
 	main_vbox.custom_minimum_size = Vector2(800, 500)
-	add_child(main_vbox)
+	center.add_child(main_vbox)
 
 	# Victory title
 	title_label = Label.new()
@@ -70,29 +71,38 @@ func _build_ui() -> void:
 	defeated_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
 	main_vbox.add_child(defeated_label)
 
-	# Case opening area
+	# Case opening area - using anchors for centering
 	var case_area := Control.new()
-	case_area.custom_minimum_size = Vector2(800, 180)
+	case_area.custom_minimum_size = Vector2(ITEM_WIDTH * VISIBLE_ITEMS + 40, 180)
+	case_area.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	main_vbox.add_child(case_area)
 
-	# Strip container with clipping
+	# Strip container with clipping - centered with anchors
 	strip_container = Control.new()
 	strip_container.custom_minimum_size = Vector2(ITEM_WIDTH * VISIBLE_ITEMS, ITEM_HEIGHT)
-	strip_container.position = Vector2((800 - ITEM_WIDTH * VISIBLE_ITEMS) / 2, 20)
 	strip_container.clip_contents = true
+	strip_container.anchor_left = 0.5
+	strip_container.anchor_right = 0.5
+	strip_container.anchor_top = 0.0
+	strip_container.offset_left = -(ITEM_WIDTH * VISIBLE_ITEMS) / 2
+	strip_container.offset_right = (ITEM_WIDTH * VISIBLE_ITEMS) / 2
+	strip_container.offset_top = 20
+	strip_container.offset_bottom = 20 + ITEM_HEIGHT
 	case_area.add_child(strip_container)
 
 	# Border around strip
 	var border := ColorRect.new()
 	border.color = Color(0.4, 0.35, 0.2)
-	border.position = Vector2(-4, -4)
-	border.size = Vector2(ITEM_WIDTH * VISIBLE_ITEMS + 8, ITEM_HEIGHT + 8)
+	border.set_anchors_preset(Control.PRESET_FULL_RECT)
+	border.offset_left = -4
+	border.offset_top = -4
+	border.offset_right = 4
+	border.offset_bottom = 4
 	strip_container.add_child(border)
 
 	var inner_bg := ColorRect.new()
 	inner_bg.color = Color(0.1, 0.1, 0.12)
-	inner_bg.position = Vector2(0, 0)
-	inner_bg.size = Vector2(ITEM_WIDTH * VISIBLE_ITEMS, ITEM_HEIGHT)
+	inner_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	strip_container.add_child(inner_bg)
 
 	# The scrolling strip
@@ -100,17 +110,26 @@ func _build_ui() -> void:
 	strip.add_theme_constant_override("separation", 0)
 	strip_container.add_child(strip)
 
-	# Center pointer/marker
+	# Center pointer/marker - anchored to center of case_area
 	pointer = ColorRect.new()
 	pointer.color = Color(1.0, 0.8, 0.2)
-	pointer.size = Vector2(4, ITEM_HEIGHT + 20)
-	pointer.position = Vector2((800 - 4) / 2, 10)
+	pointer.custom_minimum_size = Vector2(4, ITEM_HEIGHT + 20)
+	pointer.anchor_left = 0.5
+	pointer.anchor_right = 0.5
+	pointer.offset_left = -2
+	pointer.offset_right = 2
+	pointer.offset_top = 10
+	pointer.offset_bottom = 10 + ITEM_HEIGHT + 20
 	case_area.add_child(pointer)
 
-	# Pointer arrow top
+	# Pointer arrow top - anchored to center
 	var arrow_top := Label.new()
 	arrow_top.text = "▼"
-	arrow_top.position = Vector2((800 - 20) / 2, 0)
+	arrow_top.anchor_left = 0.5
+	arrow_top.anchor_right = 0.5
+	arrow_top.offset_left = -10
+	arrow_top.offset_right = 10
+	arrow_top.offset_top = 0
 	arrow_top.add_theme_font_size_override("font_size", 20)
 	arrow_top.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
 	case_area.add_child(arrow_top)
@@ -290,43 +309,45 @@ func _play_spin_animation() -> void:
 		var item_panel := _create_item_panel(item)
 		strip.add_child(item_panel)
 
-	# Calculate target position (center the winning item under pointer)
-	var target_x := -(winning_index * ITEM_WIDTH) + (VISIBLE_ITEMS / 2 * ITEM_WIDTH)
+	# Wait a frame for sizes to be valid
+	await get_tree().process_frame
+
+	# Calculate target position using actual strip_container size
+	var clip_center := strip_container.size.x * 0.5
+	var item_center := float(winning_index) * ITEM_WIDTH + ITEM_WIDTH * 0.5
+	var target_x := clip_center - item_center
 
 	# Start position
 	strip.position.x = 0
 
-	# Animate with easing (fast start, slow end)
-	var elapsed := 0.0
-	var start_x := 0.0
+	# Animate using Tween (frame-rate independent)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(strip, "position:x", target_x, SPIN_DURATION)
 
-	while elapsed < SPIN_DURATION:
-		elapsed += get_process_delta_time()
-		var t := elapsed / SPIN_DURATION
+	# Run pointer flash in parallel with the tween (fire and forget)
+	_flash_pointer_during_spin(SPIN_DURATION)
 
-		# Cubic ease out for smooth deceleration
-		var eased_t := 1.0 - pow(1.0 - t, 3)
-
-		strip.position.x = lerp(start_x, float(target_x), eased_t)
-
-		# Add tick sound effect feel with color flash
-		if fmod(elapsed, 0.08) < get_process_delta_time() and t < 0.8:
-			pointer.color = Color(1.0, 1.0, 1.0)
-		else:
-			pointer.color = Color(1.0, 0.8, 0.2)
-
-		await get_tree().process_frame
-
-	# Final position
-	strip.position.x = target_x
+	await tween.finished
 	pointer.color = Color(1.0, 0.8, 0.2)
 
-	# Flash effect
+	# Flash effect at end
 	for i in range(5):
 		pointer.color = Color(1.0, 1.0, 1.0)
 		await get_tree().create_timer(0.1).timeout
 		pointer.color = Color(1.0, 0.8, 0.2)
 		await get_tree().create_timer(0.1).timeout
+
+func _flash_pointer_during_spin(duration: float) -> void:
+	var elapsed := 0.0
+	while elapsed < duration * 0.8:
+		if fmod(elapsed, 0.08) < 0.02:
+			pointer.color = Color(1.0, 1.0, 1.0)
+		else:
+			pointer.color = Color(1.0, 0.8, 0.2)
+		await get_tree().create_timer(0.02).timeout
+		elapsed += 0.02
 
 func _show_result() -> void:
 	result_panel.visible = true
