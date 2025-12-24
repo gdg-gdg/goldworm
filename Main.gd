@@ -135,17 +135,22 @@ func _build_ui() -> void:
 	var left_panel := VBoxContainer.new()
 	left_panel.name = "LeftPanel"
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_hbox.add_child(left_panel)
-	
+
 	var player_label := Label.new()
 	player_label.text = "YOUR GRID"
 	player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	player_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	left_panel.add_child(player_label)
-	
+
 	player_grid = _create_grid("player")
+	player_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	left_panel.add_child(player_grid)
-	
+
 	player_worm_panel = VBoxContainer.new()
+	player_worm_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var pwp_label := Label.new()
 	pwp_label.text = "Your Worms:"
 	player_worm_panel.add_child(pwp_label)
@@ -154,7 +159,8 @@ func _build_ui() -> void:
 	# Center panel (controls + status)
 	var center_panel := VBoxContainer.new()
 	center_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-
+	center_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	center_panel.custom_minimum_size.x = 200
 	main_hbox.add_child(center_panel)
 	
@@ -233,17 +239,22 @@ func _build_ui() -> void:
 	var right_panel := VBoxContainer.new()
 	right_panel.name = "RightPanel"
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_hbox.add_child(right_panel)
-	
+
 	var cpu_label := Label.new()
 	cpu_label.text = "ENEMY GRID"
 	cpu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cpu_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	right_panel.add_child(cpu_label)
-	
+
 	cpu_grid = _create_grid("cpu")
+	cpu_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	right_panel.add_child(cpu_grid)
-	
+
 	cpu_worm_panel = VBoxContainer.new()
+	cpu_worm_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var cwp_label := Label.new()
 	cwp_label.text = "Enemy Worms:"
 	cpu_worm_panel.add_child(cwp_label)
