@@ -50,11 +50,20 @@ func _build_ui() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
-	# Main container - no manual position offset needed
+	# Root HBox: main content on left, possible contents on right
+	var root_hbox := HBoxContainer.new()
+	root_hbox.add_theme_constant_override("separation", 30)
+	center.add_child(root_hbox)
+
+	# Main container (left side)
 	var main_vbox := VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 20)
-	main_vbox.custom_minimum_size = Vector2(800, 500)
-	center.add_child(main_vbox)
+	main_vbox.custom_minimum_size = Vector2(880, 500)
+	root_hbox.add_child(main_vbox)
+
+	# Possible contents panel (right side)
+	var contents_panel := _build_contents_panel()
+	root_hbox.add_child(contents_panel)
 
 	# Victory title
 	title_label = Label.new()
@@ -194,19 +203,200 @@ func _build_ui() -> void:
 	continue_btn.visible = false
 	btn_hbox.add_child(continue_btn)
 
-func _create_item_panel(item: Dictionary) -> PanelContainer:
+func _build_contents_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(220, 450)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.1)
+	style.set_corner_radius_all(8)
+	style.border_color = Color(0.3, 0.3, 0.35)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	title.text = "Possible Contents"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(0.8, 0.7, 0.5))
+	vbox.add_child(title)
+
+	# Separator
+	var sep := HSeparator.new()
+	sep.add_theme_constant_override("separation", 4)
+	vbox.add_child(sep)
+
+	# Scroll container for items
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(200, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var items_vbox := VBoxContainer.new()
+	items_vbox.add_theme_constant_override("separation", 10)
+	scroll.add_child(items_vbox)
+
+	# Add all loot pool items
+	for item in loot_pool:
+		var row := _create_contents_row(item)
+		items_vbox.add_child(row)
+
+	return panel
+
+func _create_contents_row(item: Dictionary) -> PanelContainer:
+	var item_name: String = item.get("name", "???")
+	var rarity: String = item.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_owned := _is_item_owned(item)
+
+	# Dim if owned
+	var display_color := rarity_color.darkened(0.5) if is_owned else rarity_color
+
+	# Item panel with colored border
+	var row_panel := PanelContainer.new()
+	row_panel.custom_minimum_size = Vector2(190, 70)
+
+	var row_style := StyleBoxFlat.new()
+	row_style.bg_color = display_color.darkened(0.8)
+	row_style.border_color = display_color
+	row_style.set_border_width_all(2)
+	row_style.set_corner_radius_all(4)
+	row_panel.add_theme_stylebox_override("panel", row_style)
+
+	if is_owned:
+		row_panel.modulate.a = 0.6
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	row_panel.add_child(hbox)
+
+	# Left side: icon + shape
+	var left_vbox := VBoxContainer.new()
+	left_vbox.add_theme_constant_override("separation", 2)
+	hbox.add_child(left_vbox)
+
+	# Icon
+	var icon := Label.new()
+	icon.text = "🐛" if item.get("type") == "worm" else "💥"
+	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon.add_theme_font_size_override("font_size", 18)
+	left_vbox.add_child(icon)
+
+	# Shape preview
+	var shape_container := Control.new()
+	shape_container.custom_minimum_size = Vector2(50, 30)
+	left_vbox.add_child(shape_container)
+	_draw_mini_shape(shape_container, item, display_color)
+
+	# Right side: name + rarity
+	var right_vbox := VBoxContainer.new()
+	right_vbox.add_theme_constant_override("separation", 2)
+	right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(right_vbox)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = item_name
+	name_label.add_theme_font_size_override("font_size", 12)
+	name_label.add_theme_color_override("font_color", display_color)
+	right_vbox.add_child(name_label)
+
+	# Rarity
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.capitalize()
+	rarity_label.add_theme_font_size_override("font_size", 10)
+	rarity_label.add_theme_color_override("font_color", display_color.darkened(0.2))
+	right_vbox.add_child(rarity_label)
+
+	# Owned checkmark
+	if is_owned:
+		var check := Label.new()
+		check.text = "✓"
+		check.add_theme_font_size_override("font_size", 20)
+		check.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
+		hbox.add_child(check)
+
+	return row_panel
+
+func _draw_mini_shape(container: Control, item: Dictionary, color: Color) -> void:
+	var cells: Array = []
+
+	if item.get("type") == "worm":
+		var worm_def: Dictionary = WormDefs.WORMS.get(item.get("name", ""), {})
+		cells = worm_def.get("cells", [])
+	else:
+		var pattern: Dictionary = PatternDefs.get_pattern(item.get("name", ""))
+		cells = pattern.get("cells", [])
+
+	if cells.is_empty():
+		return
+
+	# Find bounds
+	var min_x := 999
+	var max_x := -999
+	var min_y := 999
+	var max_y := -999
+
+	for cell in cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_y = mini(min_y, cell.y)
+		max_y = maxi(max_y, cell.y)
+
+	var width := max_x - min_x + 1
+	var height := max_y - min_y + 1
+
+	var cell_size := mini(int(45.0 / width), int(25.0 / height))
+	cell_size = clampi(cell_size, 4, 8)
+
+	var total_width := width * cell_size
+	var total_height := height * cell_size
+	var offset_x := (container.custom_minimum_size.x - total_width) / 2
+	var offset_y := (container.custom_minimum_size.y - total_height) / 2
+
+	for cell in cells:
+		var rect := ColorRect.new()
+		rect.color = color
+		rect.position = Vector2(
+			offset_x + (cell.x - min_x) * cell_size,
+			offset_y + (cell.y - min_y) * cell_size
+		)
+		rect.size = Vector2(cell_size - 1, cell_size - 1)
+		container.add_child(rect)
+
+func _is_item_owned(item: Dictionary) -> bool:
+	if item.get("type") == "worm":
+		return SaveManager.has_worm(item.get("name", ""))
+	else:
+		return SaveManager.has_pattern(item.get("name", ""))
+
+func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(ITEM_WIDTH, ITEM_HEIGHT)
 
 	var rarity: String = item.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_owned := _is_item_owned(item)
+	var should_dim := dim_if_owned and is_owned
+
+	# Dim colors more for owned items
+	var display_color := rarity_color.darkened(0.5) if should_dim else rarity_color
 
 	var style := StyleBoxFlat.new()
-	style.bg_color = rarity_color.darkened(0.7)
-	style.border_color = rarity_color
+	style.bg_color = display_color.darkened(0.7)
+	style.border_color = display_color
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(4)
 	panel.add_theme_stylebox_override("panel", style)
+
+	# Apply overall dim to panel
+	if should_dim:
+		panel.modulate = Color(0.6, 0.6, 0.6, 0.8)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 5)
@@ -223,15 +413,27 @@ func _create_item_panel(item: Dictionary) -> PanelContainer:
 	var shape_container := Control.new()
 	shape_container.custom_minimum_size = Vector2(ITEM_WIDTH - 10, 50)
 	vbox.add_child(shape_container)
-	_draw_shape_preview(shape_container, item, rarity_color)
+	_draw_shape_preview(shape_container, item, display_color)
 
 	# Name
 	var name_label := Label.new()
 	name_label.text = item.get("name", "???")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.add_theme_font_size_override("font_size", 11)
-	name_label.add_theme_color_override("font_color", rarity_color)
+	name_label.add_theme_color_override("font_color", display_color)
 	vbox.add_child(name_label)
+
+	# Green tick overlay for owned items
+	if should_dim:
+		var tick_label := Label.new()
+		tick_label.text = "✓"
+		tick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		tick_label.add_theme_font_size_override("font_size", 48)
+		tick_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3, 0.8))
+		tick_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tick_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(tick_label)
 
 	return panel
 
@@ -358,7 +560,9 @@ func _play_spin_animation() -> void:
 			item = loot_item
 		else:
 			item = loot_pool[randi() % loot_pool.size()]
-		var item_panel := _create_item_panel(item)
+		# Dim owned items (except the winning item which should stand out)
+		var dim_it := (i != winning_index)
+		var item_panel := _create_item_panel(item, dim_it)
 		strip.add_child(item_panel)
 
 	# Wait a frame for sizes to be valid
