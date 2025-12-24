@@ -11,6 +11,9 @@ const MAX_SLOTS := 3
 var current_slot: int = -1
 var save_data: Dictionary = {}
 
+# Debug mode (not saved, runtime only)
+var debug_mode: bool = true
+
 # Starting loadout for new games
 const STARTING_WORMS := ["Sprout", "Bean"]
 const STARTING_PATTERNS := ["Pebble", "Twins", "Stack", "Spike", "Corner"]

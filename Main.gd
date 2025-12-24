@@ -41,6 +41,7 @@ var cpu_worm_panel: Control
 var start_button: Button
 var rotate_button: Button
 var restart_button: Button
+var debug_win_button: Button
 var roll_panel: PanelContainer
 var roll_label: Label
 var incoming_label: Label
@@ -156,6 +157,14 @@ func _build_ui() -> void:
 	restart_button.text = "Restart"
 	restart_button.pressed.connect(_on_restart_pressed)
 	center_panel.add_child(restart_button)
+
+	# Debug WIN button (only visible in debug mode)
+	debug_win_button = Button.new()
+	debug_win_button.text = "[DEBUG] WIN"
+	debug_win_button.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
+	debug_win_button.pressed.connect(_on_debug_win_pressed)
+	debug_win_button.visible = SaveManager.debug_mode
+	center_panel.add_child(debug_win_button)
 
 	# Roll panel (slot machine style)
 	roll_panel = PanelContainer.new()
@@ -876,6 +885,27 @@ func _on_restart_pressed() -> void:
 	pending_worm_def = {}
 	_update_ui()
 
+func _on_debug_win_pressed() -> void:
+	if not SaveManager.debug_mode:
+		return
+	if GameState.phase == GameState.Phase.GAME_OVER:
+		return
+
+	# Destroy all CPU worms instantly
+	for worm in GameState.cpu_board["worms"]:
+		if not worm.get("destroyed", false):
+			# Mark all cells as hit
+			for cell in worm["cells"]:
+				worm["hit_set"][cell] = true
+				GameState.cpu_board["revealed"][cell] = GameState.CellState.HIT_BODY
+			worm["destroyed"] = true
+			GameState.worm_destroyed.emit(GameState.Owner.PLAYER, worm["name"])
+
+	# Trigger game over
+	GameState.phase = GameState.Phase.GAME_OVER
+	GameState.game_over.emit(GameState.Owner.PLAYER)
+	_update_ui()
+
 func _on_cell_hover(cell: Button) -> void:
 	var grid_name: String = cell.get_meta("grid")
 	var x: int = cell.get_meta("x")
@@ -1491,6 +1521,8 @@ func _update_buttons() -> void:
 	rotate_button.visible = GameState.phase != GameState.Phase.GAME_OVER
 	worm_select_panel.visible = GameState.phase == GameState.Phase.PLACEMENT
 	roll_panel.visible = GameState.phase == GameState.Phase.BATTLE or GameState.phase == GameState.Phase.GAME_OVER
+	# Debug WIN button only visible in debug mode and not during game over
+	debug_win_button.visible = SaveManager.debug_mode and GameState.phase != GameState.Phase.GAME_OVER
 
 func _update_grid_display() -> void:
 	_update_player_grid()

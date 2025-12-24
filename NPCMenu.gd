@@ -2,8 +2,19 @@ extends Control
 ## NPCMenu.gd - NPC selection menu for entering battles
 ## =====================================================
 
+const RARITY_COLORS := {
+	"common": Color(0.6, 0.6, 0.6),
+	"uncommon": Color(0.3, 0.5, 0.9),
+	"rare": Color(0.6, 0.3, 0.8),
+	"epic": Color(0.9, 0.4, 0.6),
+	"legendary": Color(0.9, 0.3, 0.3),
+	"mythic": Color(1.0, 0.8, 0.2),
+}
+
 var npc_panels: Dictionary = {}
 var selected_npc: String = ""
+var drops_popup: Control = null
+var loadout_popup: Control = null
 
 func _ready() -> void:
 	_build_ui()
@@ -207,13 +218,34 @@ func _create_npc_panel(npc_id: String) -> Control:
 	status_label.add_theme_font_size_override("font_size", 11)
 	vbox.add_child(status_label)
 
+	# Button container
+	var btn_hbox := HBoxContainer.new()
+	btn_hbox.add_theme_constant_override("separation", 5)
+	vbox.add_child(btn_hbox)
+
 	# Fight button
 	var fight_btn := Button.new()
 	fight_btn.name = "FightBtn"
 	fight_btn.text = "Fight!"
-	fight_btn.custom_minimum_size = Vector2(150, 35)
+	fight_btn.custom_minimum_size = Vector2(90, 35)
 	fight_btn.pressed.connect(_on_fight.bind(npc_id))
-	vbox.add_child(fight_btn)
+	btn_hbox.add_child(fight_btn)
+
+	# View Drops button
+	var drops_btn := Button.new()
+	drops_btn.name = "DropsBtn"
+	drops_btn.text = "Drops"
+	drops_btn.custom_minimum_size = Vector2(50, 35)
+	drops_btn.pressed.connect(_on_view_drops.bind(npc_id))
+	btn_hbox.add_child(drops_btn)
+
+	# View Loadout button (enemy worm + pattern pool)
+	var loadout_btn := Button.new()
+	loadout_btn.name = "LoadoutBtn"
+	loadout_btn.text = "Loadout"
+	loadout_btn.custom_minimum_size = Vector2(55, 35)
+	loadout_btn.pressed.connect(_on_view_loadout.bind(npc_id))
+	btn_hbox.add_child(loadout_btn)
 
 	panel.set_meta("npc_id", npc_id)
 	panel.set_meta("style", style)
@@ -264,3 +296,345 @@ func _on_back() -> void:
 
 func _on_collection() -> void:
 	get_tree().change_scene_to_file("res://CollectionScreen.tscn")
+
+func _on_view_drops(npc_id: String) -> void:
+	# Close existing popup if any
+	if drops_popup != null:
+		drops_popup.queue_free()
+		drops_popup = null
+
+	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
+	var loot_pool := NPCDefs.get_npc_loot_pool(npc_id)
+
+	# Create popup overlay
+	drops_popup = ColorRect.new()
+	drops_popup.color = Color(0, 0, 0, 0.85)
+	drops_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	drops_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(drops_popup)
+
+	# Main container
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(500, 400)
+	panel.position = Vector2(-250, -200)
+	drops_popup.add_child(panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.4, 0.4, 0.5)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 15)
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	title.text = "%s - Possible Drops" % npc.get("name", "???")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	vbox.add_child(title)
+
+	# Scroll container for items
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(480, 280)
+	vbox.add_child(scroll)
+
+	var items_vbox := VBoxContainer.new()
+	items_vbox.add_theme_constant_override("separation", 8)
+	scroll.add_child(items_vbox)
+
+	# Group items by type
+	var worms: Array = []
+	var patterns: Array = []
+	for item in loot_pool:
+		if item["type"] == "worm":
+			worms.append(item)
+		else:
+			patterns.append(item)
+
+	# Show worms
+	if worms.size() > 0:
+		var worms_label := Label.new()
+		worms_label.text = "🐛 Worms"
+		worms_label.add_theme_font_size_override("font_size", 16)
+		worms_label.add_theme_color_override("font_color", Color(0.5, 0.8, 0.5))
+		items_vbox.add_child(worms_label)
+
+		for item in worms:
+			var item_row := _create_drop_item_row(item)
+			items_vbox.add_child(item_row)
+
+	# Show patterns
+	if patterns.size() > 0:
+		var patterns_label := Label.new()
+		patterns_label.text = "💥 Attack Patterns"
+		patterns_label.add_theme_font_size_override("font_size", 16)
+		patterns_label.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+		items_vbox.add_child(patterns_label)
+
+		for item in patterns:
+			var item_row := _create_drop_item_row(item)
+			items_vbox.add_child(item_row)
+
+	# Close button
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(120, 40)
+	close_btn.pressed.connect(_close_drops_popup)
+	vbox.add_child(close_btn)
+
+func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+
+	var rarity: String = item.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_owned := false
+
+	if item["type"] == "worm":
+		is_owned = SaveManager.has_worm(item["name"])
+	else:
+		is_owned = SaveManager.has_pattern(item["name"])
+
+	# Icon
+	var icon := Label.new()
+	icon.text = "🐛" if item["type"] == "worm" else "💥"
+	icon.add_theme_font_size_override("font_size", 16)
+	row.add_child(icon)
+
+	# Shape preview
+	var cells: Array = []
+	if item["type"] == "worm":
+		var worm_def: Dictionary = WormDefs.WORMS.get(item["name"], {})
+		cells = worm_def.get("cells", [])
+	else:
+		var pattern: Dictionary = PatternDefs.get_pattern(item["name"])
+		cells = pattern.get("cells", [])
+
+	var shape_container := Control.new()
+	shape_container.custom_minimum_size = Vector2(80, 30)
+	row.add_child(shape_container)
+	_draw_shape(shape_container, cells, rarity_color)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = item["name"]
+	name_label.custom_minimum_size.x = 100
+	name_label.add_theme_font_size_override("font_size", 14)
+	name_label.add_theme_color_override("font_color", rarity_color)
+	row.add_child(name_label)
+
+	# Rarity
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.to_upper()
+	rarity_label.custom_minimum_size.x = 70
+	rarity_label.add_theme_font_size_override("font_size", 12)
+	rarity_label.add_theme_color_override("font_color", rarity_color.darkened(0.2))
+	row.add_child(rarity_label)
+
+	# Owned status
+	var owned_label := Label.new()
+	if is_owned:
+		owned_label.text = "✓ Owned"
+		owned_label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	else:
+		owned_label.text = "Not owned"
+		owned_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+	owned_label.add_theme_font_size_override("font_size", 12)
+	row.add_child(owned_label)
+
+	return row
+
+func _close_drops_popup() -> void:
+	if drops_popup != null:
+		drops_popup.queue_free()
+		drops_popup = null
+
+func _on_view_loadout(npc_id: String) -> void:
+	# Close existing popup if any
+	if loadout_popup != null:
+		loadout_popup.queue_free()
+		loadout_popup = null
+
+	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
+
+	# Get NPC's loadout
+	var loadout_worms := NPCDefs.get_npc_loadout_worms(npc_id)
+	var loadout_patterns := NPCDefs.get_npc_loadout_patterns(npc_id)
+
+	# Create popup overlay
+	loadout_popup = ColorRect.new()
+	loadout_popup.color = Color(0, 0, 0, 0.85)
+	loadout_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	loadout_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(loadout_popup)
+
+	# Main container
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(550, 500)
+	panel.position = Vector2(-275, -250)
+	loadout_popup.add_child(panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.5, 0.4, 0.6)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	title.text = "%s - Battle Loadout" % npc.get("name", "???")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(0.8, 0.6, 0.9))
+	vbox.add_child(title)
+
+	var desc := Label.new()
+	desc.text = "Worms and attack patterns this enemy uses in battle:"
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc.add_theme_font_size_override("font_size", 14)
+	desc.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	vbox.add_child(desc)
+
+	# Scroll container
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(520, 350)
+	vbox.add_child(scroll)
+
+	var items_vbox := VBoxContainer.new()
+	items_vbox.add_theme_constant_override("separation", 6)
+	scroll.add_child(items_vbox)
+
+	# Show worms section
+	var worms_header := Label.new()
+	worms_header.text = "🐛 Worms (picks 2 for battle)"
+	worms_header.add_theme_font_size_override("font_size", 16)
+	worms_header.add_theme_color_override("font_color", Color(0.5, 0.8, 0.5))
+	items_vbox.add_child(worms_header)
+
+	for worm_name in loadout_worms:
+		var worm_def: Dictionary = WormDefs.WORMS.get(worm_name, {})
+		var worm_row := _create_loadout_item_row(worm_name, worm_def, "worm")
+		items_vbox.add_child(worm_row)
+
+	# Spacer
+	var spacer := Control.new()
+	spacer.custom_minimum_size.y = 10
+	items_vbox.add_child(spacer)
+
+	# Show patterns section
+	var patterns_header := Label.new()
+	patterns_header.text = "💥 Attack Patterns"
+	patterns_header.add_theme_font_size_override("font_size", 16)
+	patterns_header.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+	items_vbox.add_child(patterns_header)
+
+	for pattern_name in loadout_patterns:
+		var pattern: Dictionary = PatternDefs.get_pattern(pattern_name)
+		var pattern_row := _create_loadout_item_row(pattern_name, pattern, "pattern")
+		items_vbox.add_child(pattern_row)
+
+	# Close button
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(120, 40)
+	close_btn.pressed.connect(_close_loadout_popup)
+	vbox.add_child(close_btn)
+
+func _create_loadout_item_row(item_name: String, item_def: Dictionary, item_type: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+
+	var rarity: String = item_def.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+
+	# Icon
+	var icon := Label.new()
+	icon.text = "🐛" if item_type == "worm" else "💥"
+	icon.add_theme_font_size_override("font_size", 16)
+	row.add_child(icon)
+
+	# Shape preview
+	var cells: Array = item_def.get("cells", [])
+	var shape_container := Control.new()
+	shape_container.custom_minimum_size = Vector2(80, 30)
+	row.add_child(shape_container)
+	_draw_shape(shape_container, cells, rarity_color)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = item_name
+	name_label.custom_minimum_size.x = 110
+	name_label.add_theme_font_size_override("font_size", 14)
+	name_label.add_theme_color_override("font_color", rarity_color)
+	row.add_child(name_label)
+
+	# Rarity
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.to_upper()
+	rarity_label.custom_minimum_size.x = 70
+	rarity_label.add_theme_font_size_override("font_size", 12)
+	rarity_label.add_theme_color_override("font_color", rarity_color.darkened(0.2))
+	row.add_child(rarity_label)
+
+	# Cell count
+	var size_label := Label.new()
+	size_label.text = "%d cells" % cells.size()
+	size_label.add_theme_font_size_override("font_size", 12)
+	size_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	row.add_child(size_label)
+
+	return row
+
+func _draw_shape(container: Control, cells: Array, color: Color) -> void:
+	if cells.is_empty():
+		return
+
+	# Find bounds
+	var min_x := 999
+	var max_x := -999
+	var min_y := 999
+	var max_y := -999
+
+	for cell in cells:
+		min_x = mini(min_x, cell.x)
+		max_x = maxi(max_x, cell.x)
+		min_y = mini(min_y, cell.y)
+		max_y = maxi(max_y, cell.y)
+
+	var width := max_x - min_x + 1
+	var height := max_y - min_y + 1
+
+	var cell_size := mini(int(70.0 / width), int(24.0 / height))
+	cell_size = clampi(cell_size, 5, 10)
+
+	var total_width := width * cell_size
+	var total_height := height * cell_size
+	var offset_x := (container.custom_minimum_size.x - total_width) / 2
+	var offset_y := (container.custom_minimum_size.y - total_height) / 2
+
+	for cell in cells:
+		var rect := ColorRect.new()
+		rect.color = color
+		rect.position = Vector2(
+			offset_x + (cell.x - min_x) * cell_size,
+			offset_y + (cell.y - min_y) * cell_size
+		)
+		rect.size = Vector2(cell_size - 1, cell_size - 1)
+		container.add_child(rect)
+
+func _close_loadout_popup() -> void:
+	if loadout_popup != null:
+		loadout_popup.queue_free()
+		loadout_popup = null

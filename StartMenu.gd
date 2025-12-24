@@ -19,13 +19,33 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	# Main container
+	# Fullscreen centering root
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	# Safe margins so it looks good at any res
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 32)
+	margin.add_theme_constant_override("margin_right", 32)
+	margin.add_theme_constant_override("margin_top", 32)
+	margin.add_theme_constant_override("margin_bottom", 32)
+	center.add_child(margin)
+
+	# Content column
 	var main_vbox := VBoxContainer.new()
-	main_vbox.set_anchors_preset(Control.PRESET_CENTER)
-	main_vbox.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	main_vbox.grow_vertical = Control.GROW_DIRECTION_BOTH
 	main_vbox.add_theme_constant_override("separation", 20)
-	add_child(main_vbox)
+	main_vbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	margin.add_child(main_vbox)
+
+	# Optional: constrain width without hardcoding position
+	# (Keeps it from going ultra-wide on big screens)
+	var width_guard := PanelContainer.new()
+	width_guard.visible = false # purely for sizing if you want; set true if you want a panel behind everything
+	width_guard.custom_minimum_size = Vector2(520, 0) # minimum
+	width_guard.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(width_guard)
 
 	# Title
 	var title := Label.new()
@@ -43,33 +63,39 @@ func _build_ui() -> void:
 	subtitle.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 	main_vbox.add_child(subtitle)
 
-	# Spacer
-	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 30
-	main_vbox.add_child(spacer)
+	# Slots container (lets you add spacing cleanly)
+	var slots_vbox := VBoxContainer.new()
+	slots_vbox.add_theme_constant_override("separation", 12)
+	slots_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(slots_vbox)
 
-	# Save slots
 	for i in range(SLOT_COUNT):
-		var slot_container := _create_slot_panel(i)
-		main_vbox.add_child(slot_container)
+		var slot_panel := _create_slot_panel(i)
+		# let it fill available width but keep a sensible minimum
+		slot_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_panel.custom_minimum_size = Vector2(520, 96)
+		slots_vbox.add_child(slot_panel)
 
-	# Spacer
-	var spacer2 := Control.new()
-	spacer2.custom_minimum_size.y = 20
-	main_vbox.add_child(spacer2)
+	# Bottom row with debug checkbox and quit button
+	var bottom_row := HBoxContainer.new()
+	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_row.add_theme_constant_override("separation", 30)
+	main_vbox.add_child(bottom_row)
 
-	# Quit button
+	# Debug mode checkbox
+	var debug_check := CheckBox.new()
+	debug_check.name = "DebugCheck"
+	debug_check.text = "Debug Mode"
+	debug_check.button_pressed = SaveManager.debug_mode
+	debug_check.toggled.connect(_on_debug_toggled)
+	bottom_row.add_child(debug_check)
+
 	var quit_btn := Button.new()
 	quit_btn.text = "Quit"
 	quit_btn.custom_minimum_size = Vector2(200, 40)
 	quit_btn.pressed.connect(_on_quit)
-	main_vbox.add_child(quit_btn)
+	bottom_row.add_child(quit_btn)
 
-	# Center the container
-	main_vbox.position = Vector2(
-		(get_viewport().get_visible_rect().size.x - 500) / 2,
-		100
-	)
 
 func _create_slot_panel(slot_index: int) -> Control:
 	var panel := PanelContainer.new()
@@ -179,6 +205,9 @@ func _confirm_delete(slot_index: int, dialog: ConfirmationDialog) -> void:
 
 func _on_quit() -> void:
 	get_tree().quit()
+
+func _on_debug_toggled(pressed: bool) -> void:
+	SaveManager.debug_mode = pressed
 
 func _go_to_npc_menu() -> void:
 	get_tree().change_scene_to_file("res://NPCMenu.tscn")

@@ -96,10 +96,14 @@ func get_player_available_patterns() -> Array:
 	return patterns
 
 func _cpu_place_worms() -> void:
-	# Randomly select 2 worms for CPU from pool
-	var available_worms := WORM_POOL.duplicate()
+	# Get worms from NPC's loadout, fallback to global pool
+	var available_worms: Array = []
+	if current_npc_id != "":
+		available_worms = NPCDefs.get_npc_loadout_worms(current_npc_id).duplicate()
+	if available_worms.is_empty():
+		available_worms = WORM_POOL.duplicate()
 	available_worms.shuffle()
-	var cpu_worms := [available_worms[0], available_worms[1]]
+	var cpu_worms := [available_worms[0], available_worms[1 % available_worms.size()]]
 
 	# Place worms randomly
 	for worm_name in cpu_worms:
@@ -203,7 +207,27 @@ func start_battle() -> bool:
 	return true
 
 func _roll_pattern() -> void:
-	current_pattern = PATTERN_DEFS[randi() % PATTERN_DEFS.size()]
+	var patterns: Array = []
+
+	if current_turn == Turn.PLAYER:
+		# Player uses their unlocked patterns
+		patterns = get_player_available_patterns()
+	else:
+		# CPU uses NPC's loadout patterns
+		if current_npc_id != "":
+			var npc_pattern_names := NPCDefs.get_npc_loadout_patterns(current_npc_id)
+			for name in npc_pattern_names:
+				var p := PatternDefs.get_pattern(name)
+				if not p.is_empty():
+					patterns.append(p)
+		# Fallback to all patterns if empty
+		if patterns.is_empty():
+			patterns = PATTERN_DEFS.duplicate()
+
+	if patterns.is_empty():
+		patterns = PATTERN_DEFS.duplicate()
+
+	current_pattern = patterns[randi() % patterns.size()]
 	current_pattern_rotation = 0
 
 func rotate_pattern() -> void:

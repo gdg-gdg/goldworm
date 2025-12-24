@@ -5,9 +5,13 @@ class_name NPCDefs
 ## Each NPC has:
 ##   - id: Unique identifier
 ##   - name: Display name
+##   - folder: Folder name under npcs/ containing loadout.gd and loot.gd
 ##   - unlock_requirement: Condition to unlock this NPC
-##   - loot_pool: Items that can drop from this NPC's case
 ##   - difficulty: AI skill level (for future use)
+##
+## Loadouts and loot pools are defined in:
+##   - npcs/{folder}/loadout.gd - Worms and patterns NPC uses in battle
+##   - npcs/{folder}/loot.gd - Items dropped when defeating NPC
 ##
 ## Unlock Requirements:
 ##   - NPC 1: Always unlocked (starting opponent)
@@ -21,63 +25,106 @@ static var NPCS: Dictionary = {
 		"id": "npc1",
 		"name": "Farmer Joe",
 		"description": "A simple farmer who dabbles in worm warfare.",
+		"folder": "farmer_joe",
 		"unlock_requirement": {"type": "start"},
-		"loot_pool": "npc1",
 		"difficulty": 1,
 	},
 	"npc2": {
 		"id": "npc2",
 		"name": "Garden Gnome Gary",
 		"description": "Don't let his size fool you - he's ruthless.",
+		"folder": "garden_gnome_gary",
 		"unlock_requirement": {"type": "total_drops", "count": 1},
-		"loot_pool": "npc2",
 		"difficulty": 2,
 	},
 	"npc3": {
 		"id": "npc3",
 		"name": "Mole King",
 		"description": "Rules the underground with an iron claw.",
+		"folder": "mole_king",
 		"unlock_requirement": {"type": "total_drops", "count": 3},
-		"loot_pool": "npc3",
 		"difficulty": 3,
 	},
 	"npc4": {
 		"id": "npc4",
 		"name": "The Compost Queen",
 		"description": "Her decay is your defeat.",
+		"folder": "compost_queen",
 		"unlock_requirement": {"type": "rare_drops", "count": 4},
-		"loot_pool": "npc4",
 		"difficulty": 4,
 	},
 	"npc5": {
 		"id": "npc5",
 		"name": "Worm God",
 		"description": "The ultimate challenge. Collect everything to face him.",
+		"folder": "worm_god",
 		"unlock_requirement": {"type": "collect_all_before"},
-		"loot_pool": "npc5",
 		"difficulty": 5,
 	},
 }
 
 static var NPC_ORDER: Array = ["npc1", "npc2", "npc3", "npc4", "npc5"]
 
+# Cache for loaded scripts
+static var _loadout_cache: Dictionary = {}
+static var _loot_cache: Dictionary = {}
+
 # =============================================================================
-# LOOT POOL HELPERS
+# LOADOUT HELPERS (What NPC uses in battle)
+# =============================================================================
+
+static func get_npc_loadout_worms(npc_id: String) -> Array[String]:
+	## Returns worm names this NPC can use in battle
+	var npc = NPCS.get(npc_id, {})
+	var folder: String = npc.get("folder", "")
+	if folder.is_empty():
+		return []
+
+	var script_path := "res://npcs/%s/loadout.gd" % folder
+	var script = load(script_path)
+	if script == null:
+		push_error("Failed to load loadout for NPC: " + npc_id)
+		return []
+
+	return script.WORMS
+
+static func get_npc_loadout_patterns(npc_id: String) -> Array[String]:
+	## Returns pattern names this NPC can use in battle
+	var npc = NPCS.get(npc_id, {})
+	var folder: String = npc.get("folder", "")
+	if folder.is_empty():
+		return []
+
+	var script_path := "res://npcs/%s/loadout.gd" % folder
+	var script = load(script_path)
+	if script == null:
+		push_error("Failed to load loadout for NPC: " + npc_id)
+		return []
+
+	return script.PATTERNS
+
+# =============================================================================
+# LOOT POOL HELPERS (What drops when defeating NPC)
 # =============================================================================
 
 static func get_npc_loot_pool(npc_id: String) -> Array:
 	## Returns all items in an NPC's loot pool
 	## Each item: { type: "worm"|"pattern", name: String, rarity: String }
 	var npc = NPCS.get(npc_id, {})
-	var pool_name: String = npc.get("loot_pool", "")
-	if pool_name.is_empty():
+	var folder: String = npc.get("folder", "")
+	if folder.is_empty():
+		return []
+
+	var script_path := "res://npcs/%s/loot.gd" % folder
+	var script = load(script_path)
+	if script == null:
+		push_error("Failed to load loot for NPC: " + npc_id)
 		return []
 
 	var items: Array = []
 
-	# Add worms from this pool
-	var worms := WormDefs.get_worms_in_pool(pool_name)
-	for worm_name in worms:
+	# Add worms from loot file
+	for worm_name in script.WORMS:
 		var worm_def = WormDefs.WORMS.get(worm_name, {})
 		items.append({
 			"type": "worm",
@@ -85,16 +132,15 @@ static func get_npc_loot_pool(npc_id: String) -> Array:
 			"rarity": worm_def.get("rarity", "common")
 		})
 
-	# Add patterns from this pool
-	var patterns := PatternDefs.get_patterns_in_pool(pool_name)
-	for pattern in patterns:
-		if pattern.get("is_miss", false):
-			continue  # Don't include miss patterns as loot
-		items.append({
-			"type": "pattern",
-			"name": pattern.get("name", ""),
-			"rarity": pattern.get("rarity", "common")
-		})
+	# Add patterns from loot file
+	for pattern_name in script.PATTERNS:
+		var pattern = PatternDefs.get_pattern(pattern_name)
+		if not pattern.is_empty():
+			items.append({
+				"type": "pattern",
+				"name": pattern_name,
+				"rarity": pattern.get("rarity", "common")
+			})
 
 	return items
 
