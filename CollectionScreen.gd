@@ -40,8 +40,7 @@ func _build_ui() -> void:
 
 	var title := Label.new()
 	title.text = "Collection"
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	Fonts.apply_title(title, 36)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(title)
 
@@ -49,6 +48,7 @@ func _build_ui() -> void:
 	back_btn.text = "Back"
 	back_btn.custom_minimum_size = Vector2(100, 40)
 	back_btn.pressed.connect(_on_back)
+	Fonts.apply_button(back_btn, 16)
 	header_hbox.add_child(back_btn)
 
 	# Tab buttons
@@ -61,6 +61,7 @@ func _build_ui() -> void:
 	worms_tab.text = "Worms (%d)" % SaveManager.get_unlocked_worms().size()
 	worms_tab.custom_minimum_size = Vector2(150, 40)
 	worms_tab.pressed.connect(_on_tab_worms)
+	Fonts.apply_button(worms_tab, 16)
 	tab_hbox.add_child(worms_tab)
 
 	var patterns_tab := Button.new()
@@ -68,6 +69,7 @@ func _build_ui() -> void:
 	patterns_tab.text = "Patterns (%d)" % SaveManager.get_unlocked_patterns().size()
 	patterns_tab.custom_minimum_size = Vector2(150, 40)
 	patterns_tab.pressed.connect(_on_tab_patterns)
+	Fonts.apply_button(patterns_tab, 16)
 	tab_hbox.add_child(patterns_tab)
 
 	# Scroll container for items
@@ -159,11 +161,10 @@ func _create_item_panel(item_name: String, item_def: Dictionary, item_type: Stri
 	var rarity_label := Label.new()
 	rarity_label.text = rarity.to_upper()
 	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rarity_label.add_theme_font_size_override("font_size", 10)
 	if is_unlocked:
-		rarity_label.add_theme_color_override("font_color", rarity_color)
+		Fonts.apply_body(rarity_label, 10, rarity_color)
 	else:
-		rarity_label.add_theme_color_override("font_color", Color(0.3, 0.3, 0.35))
+		Fonts.apply_body(rarity_label, 10, Color(0.3, 0.3, 0.35))
 	vbox.add_child(rarity_label)
 
 	# Shape preview - centered
@@ -180,29 +181,26 @@ func _create_item_panel(item_name: String, item_def: Dictionary, item_type: Stri
 		question.text = "?"
 		question.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		question.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		question.add_theme_font_size_override("font_size", 36)
-		question.add_theme_color_override("font_color", Color(0.3, 0.3, 0.35))
+		Fonts.apply_body(question, 36, Color(0.3, 0.3, 0.35))
 		question.set_anchors_preset(Control.PRESET_FULL_RECT)
 		shape_container.add_child(question)
 
 	# Name
 	var name_label := Label.new()
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if is_unlocked:
 		name_label.text = item_name
-		name_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
+		Fonts.apply_body(name_label, 14, Color(0.9, 0.9, 0.95))
 	else:
 		name_label.text = "???"
-		name_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_size_override("font_size", 14)
+		Fonts.apply_body(name_label, 14, Color(0.4, 0.4, 0.45))
 	vbox.add_child(name_label)
 
 	# Type label
 	var type_label := Label.new()
 	type_label.text = "Worm" if item_type == "worm" else "Pattern"
 	type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	type_label.add_theme_font_size_override("font_size", 10)
-	type_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.55))
+	Fonts.apply_body(type_label, 10, Color(0.5, 0.5, 0.55))
 	vbox.add_child(type_label)
 
 	return panel

@@ -72,8 +72,7 @@ func _build_ui() -> void:
 	title_label = Label.new()
 	title_label.text = "VICTORY!"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 48)
-	title_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3))
+	Fonts.apply_title(title_label, 48)
 	main_vbox.add_child(title_label)
 
 	# Defeated NPC name
@@ -81,8 +80,7 @@ func _build_ui() -> void:
 	defeated_label = Label.new()
 	defeated_label.text = "You defeated %s!" % npc.get("name", "???")
 	defeated_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	defeated_label.add_theme_font_size_override("font_size", 20)
-	defeated_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
+	Fonts.apply_body(defeated_label, 20, Color(0.7, 0.8, 0.7))
 	main_vbox.add_child(defeated_label)
 
 	# Loot box button (shown initially, hidden after click)
@@ -117,15 +115,14 @@ func _build_ui() -> void:
 	var box_icon := Label.new()
 	box_icon.text = "🎁"
 	box_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box_icon.add_theme_font_size_override("font_size", 64)
+	Fonts.apply_body(box_icon, 64, Color.WHITE)
 	box_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box_vbox.add_child(box_icon)
 
 	var box_label := Label.new()
 	box_label.text = "CLICK TO OPEN"
 	box_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box_label.add_theme_font_size_override("font_size", 16)
-	box_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	Fonts.apply_body(box_label, 16, Color(0.9, 0.7, 0.3))
 	box_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box_vbox.add_child(box_label)
 
@@ -204,6 +201,7 @@ func _build_ui() -> void:
 	continue_btn.custom_minimum_size = Vector2(150, 50)
 	continue_btn.pressed.connect(_on_continue)
 	continue_btn.visible = false
+	Fonts.apply_button(continue_btn, 18)
 	btn_hbox.add_child(continue_btn)
 
 func _build_contents_panel() -> PanelContainer:
@@ -225,8 +223,7 @@ func _build_contents_panel() -> PanelContainer:
 	var title := Label.new()
 	title.text = "Possible Drops"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	Fonts.apply_title(title, 18)
 	vbox.add_child(title)
 
 	# Group items by type
@@ -241,9 +238,8 @@ func _build_contents_panel() -> PanelContainer:
 	# Show worms section
 	if worms.size() > 0:
 		var worms_label := Label.new()
-		worms_label.text = "🐛 Worms"
-		worms_label.add_theme_font_size_override("font_size", 14)
-		worms_label.add_theme_color_override("font_color", Color(0.5, 0.8, 0.5))
+		worms_label.text = "Worms"
+		Fonts.apply_body(worms_label, 14, Color(0.5, 0.8, 0.5))
 		vbox.add_child(worms_label)
 
 		for item in worms:
@@ -253,9 +249,8 @@ func _build_contents_panel() -> PanelContainer:
 	# Show patterns section
 	if patterns.size() > 0:
 		var patterns_label := Label.new()
-		patterns_label.text = "💥 Patterns"
-		patterns_label.add_theme_font_size_override("font_size", 14)
-		patterns_label.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+		patterns_label.text = "Patterns"
+		Fonts.apply_body(patterns_label, 14, Color(0.5, 0.6, 0.9))
 		vbox.add_child(patterns_label)
 
 		for item in patterns:
@@ -294,23 +289,20 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 	var name_label := Label.new()
 	name_label.text = item_name
 	name_label.custom_minimum_size.x = 85
-	name_label.add_theme_font_size_override("font_size", 13)
-	name_label.add_theme_color_override("font_color", display_color)
+	Fonts.apply_body(name_label, 13, display_color)
 	row.add_child(name_label)
 
 	# Rarity badge
 	var rarity_label := Label.new()
 	rarity_label.text = rarity.substr(0, 3).to_upper()
-	rarity_label.add_theme_font_size_override("font_size", 10)
-	rarity_label.add_theme_color_override("font_color", display_color.darkened(0.1))
+	Fonts.apply_body(rarity_label, 10, display_color.darkened(0.1))
 	row.add_child(rarity_label)
 
 	# Owned checkmark
 	if is_owned:
 		var check := Label.new()
-		check.text = "✓"
-		check.add_theme_font_size_override("font_size", 14)
-		check.add_theme_color_override("font_color", Color(0.3, 0.8, 0.3))
+		check.text = "Y"
+		Fonts.apply_body(check, 14, Color(0.3, 0.8, 0.3))
 		row.add_child(check)
 
 	return row
@@ -407,7 +399,7 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	icon.text = "🐛" if item.get("type") == "worm" else "💥"
 	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	icon.add_theme_font_size_override("font_size", 36)
+	Fonts.apply_body(icon, 36, Color.WHITE)
 	vbox.add_child(icon)
 
 	# Shape preview - centered
@@ -422,18 +414,16 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	name_label.text = item.get("name", "???")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	name_label.add_theme_font_size_override("font_size", 11)
-	name_label.add_theme_color_override("font_color", display_color)
+	Fonts.apply_body(name_label, 11, display_color)
 	vbox.add_child(name_label)
 
 	# Green tick overlay for owned items
 	if should_dim:
 		var tick_label := Label.new()
-		tick_label.text = "✓"
+		tick_label.text = "Y"
 		tick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		tick_label.add_theme_font_size_override("font_size", 48)
-		tick_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3, 0.8))
+		Fonts.apply_body(tick_label, 48, Color(0.3, 0.9, 0.3, 0.8))
 		tick_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 		tick_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(tick_label)
@@ -631,7 +621,7 @@ func _show_result() -> void:
 	# Icon
 	var icon := Label.new()
 	icon.text = "🐛" if loot_item.get("type") == "worm" else "💥"
-	icon.add_theme_font_size_override("font_size", 48)
+	Fonts.apply_body(icon, 48, Color.WHITE)
 	hbox.add_child(icon)
 
 	# Info
@@ -641,31 +631,27 @@ func _show_result() -> void:
 
 	var rarity_label := Label.new()
 	rarity_label.text = rarity.to_upper()
-	rarity_label.add_theme_font_size_override("font_size", 14)
-	rarity_label.add_theme_color_override("font_color", rarity_color)
+	Fonts.apply_body(rarity_label, 14, rarity_color)
 	info_vbox.add_child(rarity_label)
 
 	var name_label := Label.new()
 	name_label.text = loot_item.get("name", "???")
-	name_label.add_theme_font_size_override("font_size", 28)
-	name_label.add_theme_color_override("font_color", rarity_color)
+	Fonts.apply_title(name_label, 28)
 	info_vbox.add_child(name_label)
 
 	var type_label := Label.new()
 	type_label.text = "Worm" if loot_item.get("type") == "worm" else "Attack Pattern"
-	type_label.add_theme_font_size_override("font_size", 12)
-	type_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	Fonts.apply_body(type_label, 12, Color(0.6, 0.6, 0.7))
 	info_vbox.add_child(type_label)
 
 	# New/duplicate status
 	var status_label := Label.new()
 	if is_new:
-		status_label.text = "✨ NEW! ✨"
-		status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
+		status_label.text = "NEW!"
+		Fonts.apply_body(status_label, 16, Color(0.3, 1.0, 0.3))
 	else:
 		status_label.text = "(Already owned)"
-		status_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-	status_label.add_theme_font_size_override("font_size", 16)
+		Fonts.apply_body(status_label, 16, Color(0.5, 0.5, 0.5))
 	info_vbox.add_child(status_label)
 
 func _save_unlock() -> void:

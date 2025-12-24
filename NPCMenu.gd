@@ -43,8 +43,7 @@ func _build_ui() -> void:
 
 	var title := Label.new()
 	title.text = "Choose Your Opponent"
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	Fonts.apply_title(title, 36)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(title)
 
@@ -76,6 +75,7 @@ func _build_ui() -> void:
 	back_btn.text = "Back to Menu"
 	back_btn.custom_minimum_size = Vector2(150, 40)
 	back_btn.pressed.connect(_on_back)
+	Fonts.apply_button(back_btn, 16)
 	bottom_hbox.add_child(back_btn)
 
 	var spacer := Control.new()
@@ -87,6 +87,7 @@ func _build_ui() -> void:
 	collection_btn.text = "View Collection"
 	collection_btn.custom_minimum_size = Vector2(150, 40)
 	collection_btn.pressed.connect(_on_collection)
+	Fonts.apply_button(collection_btn, 16)
 	bottom_hbox.add_child(collection_btn)
 
 func _create_stats_panel() -> Control:
@@ -110,14 +111,13 @@ func _create_stats_panel() -> Control:
 	worms_count.name = "WormsCount"
 	worms_count.text = str(SaveManager.get_unlocked_worms().size())
 	worms_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	worms_count.add_theme_font_size_override("font_size", 24)
-	worms_count.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	Fonts.apply_body(worms_count, 24, Color(0.4, 0.8, 0.4))
 	worms_vbox.add_child(worms_count)
 
 	var worms_label := Label.new()
 	worms_label.text = "Worms"
 	worms_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	worms_label.add_theme_font_size_override("font_size", 12)
+	Fonts.apply_body(worms_label, 12, Color.WHITE)
 	worms_vbox.add_child(worms_label)
 
 	# Patterns count
@@ -128,14 +128,13 @@ func _create_stats_panel() -> Control:
 	patterns_count.name = "PatternsCount"
 	patterns_count.text = str(SaveManager.get_unlocked_patterns().size())
 	patterns_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	patterns_count.add_theme_font_size_override("font_size", 24)
-	patterns_count.add_theme_color_override("font_color", Color(0.4, 0.6, 0.9))
+	Fonts.apply_body(patterns_count, 24, Color(0.4, 0.6, 0.9))
 	patterns_vbox.add_child(patterns_count)
 
 	var patterns_label := Label.new()
 	patterns_label.text = "Patterns"
 	patterns_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	patterns_label.add_theme_font_size_override("font_size", 12)
+	Fonts.apply_body(patterns_label, 12, Color.WHITE)
 	patterns_vbox.add_child(patterns_label)
 
 	# Drops count
@@ -146,14 +145,13 @@ func _create_stats_panel() -> Control:
 	drops_count.name = "DropsCount"
 	drops_count.text = str(SaveManager.get_total_drops())
 	drops_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	drops_count.add_theme_font_size_override("font_size", 24)
-	drops_count.add_theme_color_override("font_color", Color(0.9, 0.7, 0.3))
+	Fonts.apply_body(drops_count, 24, Color(0.9, 0.7, 0.3))
 	drops_vbox.add_child(drops_count)
 
 	var drops_label := Label.new()
 	drops_label.text = "Drops"
 	drops_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	drops_label.add_theme_font_size_override("font_size", 12)
+	Fonts.apply_body(drops_label, 12, Color.WHITE)
 	drops_vbox.add_child(drops_label)
 
 	return panel
@@ -185,8 +183,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	portrait_label.text = "?"
 	portrait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	portrait_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	portrait_label.add_theme_font_size_override("font_size", 48)
-	portrait_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+	Fonts.apply_body(portrait_label, 48, Color(0.4, 0.4, 0.5))
 	portrait_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	portrait.add_child(portrait_label)
 	panel.set_meta("portrait_label", portrait_label)
@@ -196,8 +193,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	name_label.name = "NameLabel"
 	name_label.text = npc.get("name", "???")
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_size_override("font_size", 18)
-	name_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
+	Fonts.apply_body(name_label, 18, Color(0.9, 0.9, 0.95))
 	vbox.add_child(name_label)
 
 	# Description
@@ -205,8 +201,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	desc_label.name = "DescLabel"
 	desc_label.text = npc.get("description", "")
 	desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc_label.add_theme_font_size_override("font_size", 12)
-	desc_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	Fonts.apply_body(desc_label, 12, Color(0.6, 0.6, 0.7))
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	desc_label.custom_minimum_size.x = 180
 	vbox.add_child(desc_label)
@@ -215,7 +210,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	var status_label := Label.new()
 	status_label.name = "StatusLabel"
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 11)
+	Fonts.apply_body(status_label, 11, Color.WHITE)
 	vbox.add_child(status_label)
 
 	# Button container
@@ -229,6 +224,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	fight_btn.text = "Fight!"
 	fight_btn.custom_minimum_size = Vector2(90, 35)
 	fight_btn.pressed.connect(_on_fight.bind(npc_id))
+	Fonts.apply_button(fight_btn, 14)
 	btn_hbox.add_child(fight_btn)
 
 	# View Drops button
@@ -237,6 +233,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	drops_btn.text = "Drops"
 	drops_btn.custom_minimum_size = Vector2(50, 35)
 	drops_btn.pressed.connect(_on_view_drops.bind(npc_id))
+	Fonts.apply_button(drops_btn, 12)
 	btn_hbox.add_child(drops_btn)
 
 	# View Loadout button (enemy worm + pattern pool)
@@ -245,6 +242,7 @@ func _create_npc_panel(npc_id: String) -> Control:
 	loadout_btn.text = "Loadout"
 	loadout_btn.custom_minimum_size = Vector2(55, 35)
 	loadout_btn.pressed.connect(_on_view_loadout.bind(npc_id))
+	Fonts.apply_button(loadout_btn, 12)
 	btn_hbox.add_child(loadout_btn)
 
 	panel.set_meta("npc_id", npc_id)
@@ -277,19 +275,19 @@ func _update_npcs() -> void:
 			drops_btn.disabled = false
 			loadout_btn.disabled = false
 			portrait_label.text = npc.get("name", "?")[0]
-			portrait_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+			Fonts.apply_body(portrait_label, 48, Color(0.4, 0.9, 0.4))
 			style.border_color = Color(0.4, 0.7, 0.4)
 		else:
 			name_label.text = "???"
 			desc_label.text = "Locked"
 			status_label.text = "%d / %d\n%s" % [progress["current"], progress["required"], progress["description"]]
-			status_label.add_theme_color_override("font_color", Color(0.8, 0.5, 0.3))
+			Fonts.apply_body(status_label, 11, Color(0.8, 0.5, 0.3))
 			fight_btn.disabled = true
 			fight_btn.text = "Locked"
 			drops_btn.disabled = true
 			loadout_btn.disabled = true
 			portrait_label.text = "?"
-			portrait_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+			Fonts.apply_body(portrait_label, 48, Color(0.4, 0.4, 0.5))
 			style.border_color = Color(0.3, 0.3, 0.4)
 
 func _on_fight(npc_id: String) -> void:
@@ -344,8 +342,7 @@ func _on_view_drops(npc_id: String) -> void:
 	var title := Label.new()
 	title.text = "%s - Possible Drops" % npc.get("name", "???")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4))
+	Fonts.apply_title(title, 24)
 	vbox.add_child(title)
 
 	# Scroll container for items
@@ -369,9 +366,8 @@ func _on_view_drops(npc_id: String) -> void:
 	# Show worms
 	if worms.size() > 0:
 		var worms_label := Label.new()
-		worms_label.text = "🐛 Worms"
-		worms_label.add_theme_font_size_override("font_size", 16)
-		worms_label.add_theme_color_override("font_color", Color(0.5, 0.8, 0.5))
+		worms_label.text = "Worms"
+		Fonts.apply_body(worms_label, 16, Color(0.5, 0.8, 0.5))
 		items_vbox.add_child(worms_label)
 
 		for item in worms:
@@ -381,9 +377,8 @@ func _on_view_drops(npc_id: String) -> void:
 	# Show patterns
 	if patterns.size() > 0:
 		var patterns_label := Label.new()
-		patterns_label.text = "💥 Attack Patterns"
-		patterns_label.add_theme_font_size_override("font_size", 16)
-		patterns_label.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+		patterns_label.text = "Attack Patterns"
+		Fonts.apply_body(patterns_label, 16, Color(0.5, 0.6, 0.9))
 		items_vbox.add_child(patterns_label)
 
 		for item in patterns:
@@ -395,6 +390,7 @@ func _on_view_drops(npc_id: String) -> void:
 	close_btn.text = "Close"
 	close_btn.custom_minimum_size = Vector2(120, 40)
 	close_btn.pressed.connect(_close_drops_popup)
+	Fonts.apply_button(close_btn, 16)
 	vbox.add_child(close_btn)
 
 func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
@@ -418,7 +414,7 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 	# Icon
 	var icon := Label.new()
 	icon.text = "🐛" if item["type"] == "worm" else "💥"
-	icon.add_theme_font_size_override("font_size", 16)
+	Fonts.apply_body(icon, 16, Color.WHITE)
 	row.add_child(icon)
 
 	# Shape preview
@@ -439,27 +435,24 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 	var name_label := Label.new()
 	name_label.text = item["name"]
 	name_label.custom_minimum_size.x = 100
-	name_label.add_theme_font_size_override("font_size", 14)
-	name_label.add_theme_color_override("font_color", rarity_color)
+	Fonts.apply_body(name_label, 14, rarity_color)
 	row.add_child(name_label)
 
 	# Rarity
 	var rarity_label := Label.new()
 	rarity_label.text = rarity.to_upper()
 	rarity_label.custom_minimum_size.x = 70
-	rarity_label.add_theme_font_size_override("font_size", 12)
-	rarity_label.add_theme_color_override("font_color", rarity_color.darkened(0.2))
+	Fonts.apply_body(rarity_label, 12, rarity_color.darkened(0.2))
 	row.add_child(rarity_label)
 
 	# Owned status
 	var owned_label := Label.new()
 	if is_owned:
-		owned_label.text = "✓ Owned"
-		owned_label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+		owned_label.text = "Owned"
+		Fonts.apply_body(owned_label, 12, Color(0.4, 0.8, 0.4))
 	else:
 		owned_label.text = "Not owned"
-		owned_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-	owned_label.add_theme_font_size_override("font_size", 12)
+		Fonts.apply_body(owned_label, 12, Color(0.5, 0.5, 0.5))
 	row.add_child(owned_label)
 
 	return row
@@ -513,15 +506,13 @@ func _on_view_loadout(npc_id: String) -> void:
 	var title := Label.new()
 	title.text = "%s - Battle Loadout" % npc.get("name", "???")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color(0.8, 0.6, 0.9))
+	Fonts.apply_title(title, 24)
 	vbox.add_child(title)
 
 	var desc := Label.new()
 	desc.text = "Worms and attack patterns this enemy uses in battle:"
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc.add_theme_font_size_override("font_size", 14)
-	desc.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	Fonts.apply_body(desc, 14, Color(0.6, 0.6, 0.7))
 	vbox.add_child(desc)
 
 	# Scroll container
@@ -535,9 +526,8 @@ func _on_view_loadout(npc_id: String) -> void:
 
 	# Show worms section
 	var worms_header := Label.new()
-	worms_header.text = "🐛 Worms (picks 2 for battle)"
-	worms_header.add_theme_font_size_override("font_size", 16)
-	worms_header.add_theme_color_override("font_color", Color(0.5, 0.8, 0.5))
+	worms_header.text = "Worms (picks 2 for battle)"
+	Fonts.apply_body(worms_header, 16, Color(0.5, 0.8, 0.5))
 	items_vbox.add_child(worms_header)
 
 	for worm_name in loadout_worms:
@@ -552,9 +542,8 @@ func _on_view_loadout(npc_id: String) -> void:
 
 	# Show patterns section
 	var patterns_header := Label.new()
-	patterns_header.text = "💥 Attack Patterns"
-	patterns_header.add_theme_font_size_override("font_size", 16)
-	patterns_header.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+	patterns_header.text = "Attack Patterns"
+	Fonts.apply_body(patterns_header, 16, Color(0.5, 0.6, 0.9))
 	items_vbox.add_child(patterns_header)
 
 	for pattern_name in loadout_patterns:
@@ -567,6 +556,7 @@ func _on_view_loadout(npc_id: String) -> void:
 	close_btn.text = "Close"
 	close_btn.custom_minimum_size = Vector2(120, 40)
 	close_btn.pressed.connect(_close_loadout_popup)
+	Fonts.apply_button(close_btn, 16)
 	vbox.add_child(close_btn)
 
 func _create_loadout_item_row(item_name: String, item_def: Dictionary, item_type: String) -> HBoxContainer:
@@ -584,7 +574,7 @@ func _create_loadout_item_row(item_name: String, item_def: Dictionary, item_type
 	# Icon
 	var icon := Label.new()
 	icon.text = "🐛" if item_type == "worm" else "💥"
-	icon.add_theme_font_size_override("font_size", 16)
+	Fonts.apply_body(icon, 16, Color.WHITE)
 	row.add_child(icon)
 
 	# Shape preview
@@ -598,23 +588,20 @@ func _create_loadout_item_row(item_name: String, item_def: Dictionary, item_type
 	var name_label := Label.new()
 	name_label.text = item_name
 	name_label.custom_minimum_size.x = 110
-	name_label.add_theme_font_size_override("font_size", 14)
-	name_label.add_theme_color_override("font_color", rarity_color)
+	Fonts.apply_body(name_label, 14, rarity_color)
 	row.add_child(name_label)
 
 	# Rarity
 	var rarity_label := Label.new()
 	rarity_label.text = rarity.to_upper()
 	rarity_label.custom_minimum_size.x = 70
-	rarity_label.add_theme_font_size_override("font_size", 12)
-	rarity_label.add_theme_color_override("font_color", rarity_color.darkened(0.2))
+	Fonts.apply_body(rarity_label, 12, rarity_color.darkened(0.2))
 	row.add_child(rarity_label)
 
 	# Cell count
 	var size_label := Label.new()
 	size_label.text = "%d cells" % cells.size()
-	size_label.add_theme_font_size_override("font_size", 12)
-	size_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	Fonts.apply_body(size_label, 12, Color(0.5, 0.5, 0.6))
 	row.add_child(size_label)
 
 	return row

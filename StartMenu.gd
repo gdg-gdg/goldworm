@@ -51,16 +51,14 @@ func _build_ui() -> void:
 	var title := Label.new()
 	title.text = "GARDEN NUKES vs WORMS"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 48)
-	title.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	Fonts.apply_title(title, 48)
 	main_vbox.add_child(title)
 
 	# Subtitle
 	var subtitle := Label.new()
 	subtitle.text = "Select a save file"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 20)
-	subtitle.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+	Fonts.apply_body(subtitle, 20, Color(0.6, 0.6, 0.7))
 	main_vbox.add_child(subtitle)
 
 	# Slots container (lets you add spacing cleanly)
@@ -88,12 +86,14 @@ func _build_ui() -> void:
 	debug_check.text = "Debug Mode"
 	debug_check.button_pressed = SaveManager.debug_mode
 	debug_check.toggled.connect(_on_debug_toggled)
+	Fonts.apply_button(debug_check, 14)
 	bottom_row.add_child(debug_check)
 
 	var quit_btn := Button.new()
 	quit_btn.text = "Quit"
 	quit_btn.custom_minimum_size = Vector2(200, 40)
 	quit_btn.pressed.connect(_on_quit)
+	Fonts.apply_button(quit_btn, 16)
 	bottom_row.add_child(quit_btn)
 
 
@@ -119,15 +119,13 @@ func _create_slot_panel(slot_index: int) -> Control:
 
 	var slot_label := Label.new()
 	slot_label.text = "Save Slot %d" % (slot_index + 1)
-	slot_label.add_theme_font_size_override("font_size", 20)
-	slot_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
+	Fonts.apply_body(slot_label, 20, Color(0.8, 0.8, 0.9))
 	info_vbox.add_child(slot_label)
 
 	var details_label := Label.new()
 	details_label.name = "Details"
 	details_label.text = "Empty"
-	details_label.add_theme_font_size_override("font_size", 14)
-	details_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	Fonts.apply_body(details_label, 14, Color(0.5, 0.5, 0.6))
 	info_vbox.add_child(details_label)
 
 	# Buttons
@@ -139,6 +137,7 @@ func _create_slot_panel(slot_index: int) -> Control:
 	play_btn.text = "Play"
 	play_btn.custom_minimum_size = Vector2(100, 35)
 	play_btn.pressed.connect(_on_slot_play.bind(slot_index))
+	Fonts.apply_button(play_btn, 16)
 	btn_vbox.add_child(play_btn)
 	slot_buttons.append(play_btn)
 
@@ -146,6 +145,7 @@ func _create_slot_panel(slot_index: int) -> Control:
 	delete_btn.text = "Delete"
 	delete_btn.custom_minimum_size = Vector2(100, 30)
 	delete_btn.pressed.connect(_on_slot_delete.bind(slot_index))
+	Fonts.apply_button(delete_btn, 14)
 	btn_vbox.add_child(delete_btn)
 	delete_buttons.append(delete_btn)
 
@@ -167,12 +167,12 @@ func _update_slots() -> void:
 			var npcs: int = info.get("npc_count", 0)
 			var drops: int = info.get("total_drops", 0)
 			details_label.text = "%d Worms | %d Patterns | %d Drops" % [worms, patterns, drops]
-			details_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
+			Fonts.apply_body(details_label, 14, Color(0.7, 0.8, 0.7))
 			slot_buttons[i].text = "Continue"
 			delete_buttons[i].visible = true
 		else:
 			details_label.text = "Empty - Click to start new game"
-			details_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+			Fonts.apply_body(details_label, 14, Color(0.5, 0.5, 0.6))
 			slot_buttons[i].text = "New Game"
 			delete_buttons[i].visible = false
 

@@ -143,6 +143,7 @@ func _build_ui() -> void:
 	player_label.text = "YOUR GRID"
 	player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	player_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	Fonts.apply_title(player_label, 20)
 	left_panel.add_child(player_label)
 
 	player_grid = _create_grid("player")
@@ -153,6 +154,7 @@ func _build_ui() -> void:
 	player_worm_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var pwp_label := Label.new()
 	pwp_label.text = "Your Worms:"
+	Fonts.apply_body(pwp_label, 14, Color(0.7, 0.8, 0.7))
 	player_worm_panel.add_child(pwp_label)
 	left_panel.add_child(player_worm_panel)
 	
@@ -167,17 +169,20 @@ func _build_ui() -> void:
 	status_label = Label.new()
 	status_label.text = "PLACEMENT PHASE"
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(status_label, 16, Color(0.8, 0.9, 0.8))
 	center_panel.add_child(status_label)
-	
+
 	pattern_label = Label.new()
 	pattern_label.text = ""
 	pattern_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(pattern_label, 14, Color(0.6, 0.6, 0.7))
 	center_panel.add_child(pattern_label)
-	
+
 	# Worm selection panel
 	worm_select_panel = VBoxContainer.new()
 	var ws_label := Label.new()
 	ws_label.text = "Select worm to place:"
+	Fonts.apply_body(ws_label, 14, Color(0.7, 0.7, 0.8))
 	worm_select_panel.add_child(ws_label)
 	center_panel.add_child(worm_select_panel)
 	
@@ -185,21 +190,25 @@ func _build_ui() -> void:
 	rotate_button = Button.new()
 	rotate_button.text = "Rotate (R)"
 	rotate_button.pressed.connect(_on_rotate_pressed)
+	Fonts.apply_button(rotate_button, 14)
 	center_panel.add_child(rotate_button)
-	
+
 	start_button = Button.new()
 	start_button.text = "Start Battle"
 	start_button.pressed.connect(_on_start_pressed)
+	Fonts.apply_button(start_button, 16)
 	center_panel.add_child(start_button)
-	
+
 	restart_button = Button.new()
 	restart_button.text = "Restart"
 	restart_button.pressed.connect(_on_restart_pressed)
+	Fonts.apply_button(restart_button, 14)
 	center_panel.add_child(restart_button)
 
 	# Debug WIN button (only visible in debug mode)
 	debug_win_button = Button.new()
 	debug_win_button.text = "[DEBUG] WIN"
+	Fonts.apply_button(debug_win_button, 14)
 	debug_win_button.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
 	debug_win_button.pressed.connect(_on_debug_win_pressed)
 	debug_win_button.visible = SaveManager.debug_mode
@@ -223,16 +232,14 @@ func _build_ui() -> void:
 	roll_label = Label.new()
 	roll_label.text = "---"
 	roll_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	roll_label.add_theme_font_size_override("font_size", 24)
-	roll_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	Fonts.apply_body(roll_label, 24, Color(0.9, 0.7, 0.2))
 	roll_vbox.add_child(roll_label)
 
 	# Incoming strike label
 	incoming_label = Label.new()
 	incoming_label.text = ""
 	incoming_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	incoming_label.add_theme_font_size_override("font_size", 16)
-	incoming_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+	Fonts.apply_body(incoming_label, 16, Color(1.0, 0.6, 0.2))
 	center_panel.add_child(incoming_label)
 
 	# Right panel (cpu info + grid)
@@ -247,6 +254,7 @@ func _build_ui() -> void:
 	cpu_label.text = "ENEMY GRID"
 	cpu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cpu_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	Fonts.apply_title(cpu_label, 20)
 	right_panel.add_child(cpu_label)
 
 	cpu_grid = _create_grid("cpu")
@@ -257,6 +265,7 @@ func _build_ui() -> void:
 	cpu_worm_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var cwp_label := Label.new()
 	cwp_label.text = "Enemy Worms:"
+	Fonts.apply_body(cwp_label, 14, Color(0.8, 0.7, 0.7))
 	cpu_worm_panel.add_child(cwp_label)
 	right_panel.add_child(cpu_worm_panel)
 
@@ -293,8 +302,7 @@ func _build_case_overlay() -> void:
 	var title := Label.new()
 	title.text = "ROLLING STRIKE PATTERN"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	Fonts.apply_title(title, 28)
 	main_vbox.add_child(title)
 
 	# Strip area with marker overlay
@@ -358,8 +366,7 @@ func _build_worm_pool_overlay() -> void:
 	var title := Label.new()
 	title.text = "CHOOSE YOUR WORM CASE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	Fonts.apply_title(title, 32)
 	worm_pool_container.add_child(title)
 
 	# Options container (horizontal)
@@ -393,8 +400,7 @@ func _create_worm_pool_option(index: int) -> PanelContainer:
 	var case_label := Label.new()
 	case_label.text = "Worm Case " + str(index + 1)
 	case_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	case_label.add_theme_font_size_override("font_size", 20)
-	case_label.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
+	Fonts.apply_body(case_label, 20, Color(0.7, 0.9, 0.7))
 	vbox.add_child(case_label)
 
 	# Worm preview container
@@ -436,8 +442,7 @@ func _build_pool_overlay() -> void:
 	var title := Label.new()
 	title.text = "CHOOSE YOUR CASE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	Fonts.apply_title(title, 32)
 	pool_container.add_child(title)
 
 	# Options container (horizontal)
@@ -471,8 +476,7 @@ func _create_pool_option(index: int) -> PanelContainer:
 	var case_label := Label.new()
 	case_label.text = "Case " + str(index + 1)
 	case_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	case_label.add_theme_font_size_override("font_size", 20)
-	case_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	Fonts.apply_body(case_label, 20, Color(0.8, 0.8, 0.8))
 	vbox.add_child(case_label)
 
 	# Pattern preview container
@@ -504,8 +508,7 @@ func _create_shape_visual(pattern: Dictionary, size: float = 10.0) -> Control:
 	if is_miss or cells.is_empty():
 		var miss_label := Label.new()
 		miss_label.text = "MISS"
-		miss_label.add_theme_font_size_override("font_size", int(size * 1.2))
-		miss_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+		Fonts.apply_body(miss_label, int(size * 1.2), Color(0.8, 0.2, 0.2))
 		container.add_child(miss_label)
 		container.custom_minimum_size = Vector2(size * 4, size * 1.5)
 		return container
@@ -609,16 +612,14 @@ func _show_pool_selection() -> void:
 				# Pattern name with rarity color
 				var name_label := Label.new()
 				name_label.text = pattern["name"]
-				name_label.add_theme_font_size_override("font_size", 14)
-				name_label.add_theme_color_override("font_color", _get_rarity_color(pattern["cells"].size()))
+				Fonts.apply_body(name_label, 14, _get_rarity_color(pattern["cells"].size()))
 				row.add_child(name_label)
 
 				# Rotatable label in gold
 				if pattern.get("rotatable", false):
 					var rot_label := Label.new()
 					rot_label.text = "Rotatable"
-					rot_label.add_theme_font_size_override("font_size", 12)
-					rot_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))  # Gold
+					Fonts.apply_body(rot_label, 12, Color(1.0, 0.85, 0.2))
 					row.add_child(rot_label)
 
 				preview_container.add_child(row)
@@ -710,16 +711,14 @@ func _show_worm_pool_selection() -> void:
 				# Worm name with rarity color
 				var name_label := Label.new()
 				name_label.text = worm_def["name"]
-				name_label.add_theme_font_size_override("font_size", 14)
-				name_label.add_theme_color_override("font_color", _get_rarity_color(worm_def["cells"].size()))
+				Fonts.apply_body(name_label, 14, _get_rarity_color(worm_def["cells"].size()))
 				row.add_child(name_label)
 
 				# Rotatable label in gold
 				if worm_def.get("rotatable", false):
 					var rot_label := Label.new()
 					rot_label.text = "Rotatable"
-					rot_label.add_theme_font_size_override("font_size", 12)
-					rot_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))  # Gold
+					Fonts.apply_body(rot_label, 12, Color(1.0, 0.85, 0.2))
 					row.add_child(rot_label)
 
 				preview_container.add_child(row)
@@ -831,8 +830,7 @@ func _populate_worm_case_strip(winning_worm: Dictionary) -> void:
 			var rot_label := Label.new()
 			rot_label.text = "Rotatable"
 			rot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			rot_label.add_theme_font_size_override("font_size", 10)
-			rot_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))  # Gold
+			Fonts.apply_body(rot_label, 10, Color(1.0, 0.85, 0.2))
 			vbox.add_child(rot_label)
 
 		var center := CenterContainer.new()
@@ -845,8 +843,7 @@ func _populate_worm_case_strip(winning_worm: Dictionary) -> void:
 		var label := Label.new()
 		label.text = worm_def["name"]
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 12)
-		label.add_theme_color_override("font_color", rarity_color)
+		Fonts.apply_body(label, 12, rarity_color)
 		vbox.add_child(label)
 
 		case_strip.add_child(item)
@@ -1242,8 +1239,7 @@ func _populate_case_strip(winning_pattern: Dictionary) -> void:
 			var rot_label := Label.new()
 			rot_label.text = "Rotatable"
 			rot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			rot_label.add_theme_font_size_override("font_size", 10)
-			rot_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))  # Gold
+			Fonts.apply_body(rot_label, 10, Color(1.0, 0.85, 0.2))
 			vbox.add_child(rot_label)
 
 		# Center container for shape
@@ -1259,8 +1255,7 @@ func _populate_case_strip(winning_pattern: Dictionary) -> void:
 		var label := Label.new()
 		label.text = pattern["name"]
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 12)
-		label.add_theme_color_override("font_color", rarity_color)
+		Fonts.apply_body(label, 12, rarity_color)
 		vbox.add_child(label)
 
 		case_strip.add_child(item)
@@ -1384,6 +1379,7 @@ func _update_worm_select() -> void:
 		var btn := Button.new()
 		btn.text = worm_name
 		btn.pressed.connect(_on_worm_select.bind(worm_name))
+		Fonts.apply_button(btn, 14)
 		if not GameState.current_worm_to_place.is_empty() and GameState.current_worm_to_place["name"] == worm_name:
 			btn.text = "> " + worm_name + " <"
 		row.add_child(btn)
@@ -1392,8 +1388,7 @@ func _update_worm_select() -> void:
 		if won_worm_instances.has(worm_name) and won_worm_instances[worm_name].get("rotatable", false):
 			var rot_label := Label.new()
 			rot_label.text = "Rotatable"
-			rot_label.add_theme_font_size_override("font_size", 12)
-			rot_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))  # Gold
+			Fonts.apply_body(rot_label, 12, Color(1.0, 0.85, 0.2))
 			row.add_child(rot_label)
 
 		worm_select_panel.add_child(row)
@@ -1403,7 +1398,7 @@ func _update_worm_select() -> void:
 		var worm_num := 3 - GameState.worms_remaining_to_pick  # 1 or 2
 		var pick_btn := Button.new()
 		pick_btn.text = "Open Worm Case " + str(worm_num)
-		pick_btn.add_theme_font_size_override("font_size", 16)
+		Fonts.apply_button(pick_btn, 16)
 		pick_btn.pressed.connect(_on_pick_worm_pressed)
 		worm_select_panel.add_child(pick_btn)
 
@@ -1462,9 +1457,9 @@ func _update_worm_panel(panel: VBoxContainer, board: Dictionary, show_all: bool)
 		name_label.text = worm["name"] + ":"
 		name_label.custom_minimum_size.x = 55
 		if destroyed:
-			name_label.add_theme_color_override("font_color", Color(0.5, 0.3, 0.3))
+			Fonts.apply_body(name_label, 14, Color(0.5, 0.3, 0.3))
 		else:
-			name_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+			Fonts.apply_body(name_label, 14, Color(0.8, 0.8, 0.8))
 		row.add_child(name_label)
 
 		# Visual worm shape
@@ -1475,8 +1470,7 @@ func _update_worm_panel(panel: VBoxContainer, board: Dictionary, show_all: bool)
 		if destroyed:
 			var status := Label.new()
 			status.text = "SUNK"
-			status.add_theme_font_size_override("font_size", 11)
-			status.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3))
+			Fonts.apply_body(status, 11, Color(0.8, 0.3, 0.3))
 			row.add_child(status)
 
 func _create_worm_visual(worm: Dictionary, show_all: bool) -> Control:
