@@ -1,17 +1,14 @@
 extends RefCounted
 class_name CompostQueenLoadout
 ## Compost Queen - Hard opponent
-## Loadout: 4-5 segment worms, 4-5 cell patterns
+## Loadout: 4-5 segment worms, 4-5 cell patterns (including gapped and cursed!)
 
 # Worms this NPC can use in battle (picks 2 randomly)
 static var WORMS: Array[String] = [
-	"Lumpy",
-	"Slinky",
-	"Noodle",
-	"Hook",
-	"Ziggy",
-	"Tee",
-	"Thicc",
+	"Bendy",
+	"Curly",
+	"Slope",
+	"Chonk",
 	"Zigzag",
 ]
 
@@ -23,8 +20,11 @@ static var PATTERNS: Array[String] = [
 	"Tetris-S",
 	"Line4",
 	"Diamond",
+	"Broken-Line",
+	"Horseshoe",
 	"Cross",
 	"Domino",
 	"Chonky-L",
 	"Hammer",
+	"Crater",
 ]

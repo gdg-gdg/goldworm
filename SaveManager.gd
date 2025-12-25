@@ -32,18 +32,26 @@ func _ready() -> void:
 
 func _create_new_save(save_name: String = "New Save") -> Dictionary:
 	return {
-		"version": 1,
+		"version": 3,
 		"save_name": save_name,
 		"created_at": Time.get_datetime_string_from_system(),
 		"last_played": Time.get_datetime_string_from_system(),
 		"unlocked_worms": STARTING_WORMS.duplicate(),
 		"unlocked_patterns": STARTING_PATTERNS.duplicate(),
+		"unlocked_cosmetics": [],
+		"shiny_cosmetics": [],  # Cosmetics that are shiny variants
+		"shiny_worms": [],  # Worms that are shiny variants
+		"shiny_patterns": [],  # Patterns that are shiny variants
+		"equipped_cosmetics": {},  # slot -> cosmetic_name
 		"defeated_npcs": [],
 		"total_drops": 0,
 		"common_drops": 0,
 		"uncommon_drops": 0,
 		"rare_drops": 0,
 		"epic_drops": 0,
+		"legendary_drops": 0,
+		"mythic_drops": 0,
+		"relic_drops": 0,
 	}
 
 # =============================================================================
@@ -142,12 +150,37 @@ func load_game(slot: int) -> bool:
 	save_data = data
 	current_slot = slot
 
+	# Migrate old save data (remove invalid items)
+	_migrate_save_data()
+
 	# Update last played
 	save_data["last_played"] = Time.get_datetime_string_from_system()
 	_write_save()
 
 	save_loaded.emit(slot)
 	return true
+
+func _migrate_save_data() -> void:
+	## Remove invalid worms/patterns that no longer exist in definitions
+	var valid_worms: Array = []
+	for worm_name in save_data.get("unlocked_worms", []):
+		if WormDefs.WORMS.has(worm_name):
+			valid_worms.append(worm_name)
+	save_data["unlocked_worms"] = valid_worms
+
+	var valid_patterns: Array = []
+	for pattern_name in save_data.get("unlocked_patterns", []):
+		if PatternDefs.get_pattern(pattern_name).size() > 0:
+			valid_patterns.append(pattern_name)
+	save_data["unlocked_patterns"] = valid_patterns
+
+	# Ensure starter items are always unlocked
+	for worm in STARTING_WORMS:
+		if worm not in save_data["unlocked_worms"]:
+			save_data["unlocked_worms"].append(worm)
+	for pattern in STARTING_PATTERNS:
+		if pattern not in save_data["unlocked_patterns"]:
+			save_data["unlocked_patterns"].append(pattern)
 
 func save_game() -> bool:
 	## Save current game state
@@ -216,29 +249,64 @@ func get_total_unlocks() -> int:
 # PROGRESSION UPDATES
 # =============================================================================
 
-func unlock_worm(worm_name: String, rarity: String) -> bool:
+const SHINY_CHANCE := 0.01  # 1 in 100 for all drops
+
+func unlock_worm(worm_name: String, rarity: String, is_shiny: bool = false) -> bool:
 	## Unlock a new worm. Returns true if it was newly unlocked.
 	var worms: Array = save_data.get("unlocked_worms", [])
 	if worm_name in worms:
+		# Already have it - but maybe we got a shiny upgrade?
+		if is_shiny and not is_worm_shiny(worm_name):
+			var shiny_list: Array = save_data.get("shiny_worms", [])
+			shiny_list.append(worm_name)
+			save_data["shiny_worms"] = shiny_list
+			save_game()
 		return false
 
 	worms.append(worm_name)
 	save_data["unlocked_worms"] = worms
+
+	if is_shiny:
+		var shiny_list: Array = save_data.get("shiny_worms", [])
+		shiny_list.append(worm_name)
+		save_data["shiny_worms"] = shiny_list
+
 	_record_drop(rarity)
 	save_game()
 	return true
 
-func unlock_pattern(pattern_name: String, rarity: String) -> bool:
+func unlock_pattern(pattern_name: String, rarity: String, is_shiny: bool = false) -> bool:
 	## Unlock a new pattern. Returns true if it was newly unlocked.
 	var patterns: Array = save_data.get("unlocked_patterns", [])
 	if pattern_name in patterns:
+		# Already have it - but maybe we got a shiny upgrade?
+		if is_shiny and not is_pattern_shiny(pattern_name):
+			var shiny_list: Array = save_data.get("shiny_patterns", [])
+			shiny_list.append(pattern_name)
+			save_data["shiny_patterns"] = shiny_list
+			save_game()
 		return false
 
 	patterns.append(pattern_name)
 	save_data["unlocked_patterns"] = patterns
+
+	if is_shiny:
+		var shiny_list: Array = save_data.get("shiny_patterns", [])
+		shiny_list.append(pattern_name)
+		save_data["shiny_patterns"] = shiny_list
+
 	_record_drop(rarity)
 	save_game()
 	return true
+
+func is_worm_shiny(worm_name: String) -> bool:
+	return worm_name in save_data.get("shiny_worms", [])
+
+func is_pattern_shiny(pattern_name: String) -> bool:
+	return pattern_name in save_data.get("shiny_patterns", [])
+
+func roll_shiny() -> bool:
+	return randf() < SHINY_CHANCE
 
 func record_npc_defeat(npc_id: String) -> void:
 	## Record that an NPC has been defeated
@@ -252,3 +320,81 @@ func _record_drop(rarity: String) -> void:
 	save_data["total_drops"] = save_data.get("total_drops", 0) + 1
 	var key := rarity.to_lower() + "_drops"
 	save_data[key] = save_data.get(key, 0) + 1
+
+# =============================================================================
+# COSMETIC QUERIES
+# =============================================================================
+
+func has_cosmetic(cosmetic_name: String) -> bool:
+	return cosmetic_name in save_data.get("unlocked_cosmetics", [])
+
+func get_unlocked_cosmetics() -> Array:
+	return save_data.get("unlocked_cosmetics", [])
+
+func get_equipped_cosmetics() -> Dictionary:
+	return save_data.get("equipped_cosmetics", {})
+
+func is_cosmetic_equipped(cosmetic_name: String) -> bool:
+	var equipped: Dictionary = get_equipped_cosmetics()
+	return cosmetic_name in equipped.values()
+
+func get_equipped_in_slot(slot: String) -> String:
+	return save_data.get("equipped_cosmetics", {}).get(slot, "")
+
+# =============================================================================
+# COSMETIC UPDATES
+# =============================================================================
+
+func unlock_cosmetic(cosmetic_name: String, is_shiny: bool = false) -> bool:
+	## Unlock a new cosmetic. Returns true if it was newly unlocked.
+	var cosmetics: Array = save_data.get("unlocked_cosmetics", [])
+	if cosmetic_name in cosmetics:
+		# Already have it - but maybe we got a shiny upgrade?
+		if is_shiny and not is_cosmetic_shiny(cosmetic_name):
+			var shiny_list: Array = save_data.get("shiny_cosmetics", [])
+			shiny_list.append(cosmetic_name)
+			save_data["shiny_cosmetics"] = shiny_list
+			save_game()
+		return false
+
+	cosmetics.append(cosmetic_name)
+	save_data["unlocked_cosmetics"] = cosmetics
+
+	if is_shiny:
+		var shiny_list: Array = save_data.get("shiny_cosmetics", [])
+		shiny_list.append(cosmetic_name)
+		save_data["shiny_cosmetics"] = shiny_list
+
+	_record_drop("relic")
+	save_game()
+	return true
+
+func is_cosmetic_shiny(cosmetic_name: String) -> bool:
+	return cosmetic_name in save_data.get("shiny_cosmetics", [])
+
+func equip_cosmetic(cosmetic_name: String) -> bool:
+	## Equip a cosmetic. Returns true if successful.
+	if not has_cosmetic(cosmetic_name):
+		return false
+
+	var cosmetic: Dictionary = CosmeticDefs.get_cosmetic(cosmetic_name)
+	if cosmetic.is_empty():
+		return false
+
+	var slot: String = cosmetic.get("slot", "")
+	if slot.is_empty():
+		return false
+
+	var equipped: Dictionary = save_data.get("equipped_cosmetics", {})
+	equipped[slot] = cosmetic_name
+	save_data["equipped_cosmetics"] = equipped
+	save_game()
+	return true
+
+func unequip_cosmetic(slot: String) -> void:
+	## Unequip cosmetic from a slot
+	var equipped: Dictionary = save_data.get("equipped_cosmetics", {})
+	if equipped.has(slot):
+		equipped.erase(slot)
+		save_data["equipped_cosmetics"] = equipped
+		save_game()

@@ -41,6 +41,13 @@ var placement_rotation: int = 0
 
 # Current NPC being fought (set by NPCMenu before entering battle)
 var current_npc_id: String = ""
+var _last_npc_id: String = ""  # Track NPC changes for worm persistence
+
+# Fast play mode - auto-place worms, random patterns, skip case opening
+var fast_play_mode: bool = false
+
+# Persist CPU's selected worms across restarts (only positions change)
+var cpu_selected_worms: Array = []
 
 func _ready() -> void:
 	# Don't auto-reset, wait for scene to call reset_game
@@ -63,7 +70,37 @@ func reset_game() -> void:
 
 	current_worm_to_place = {}
 	_cpu_place_worms()
+
+	# In fast play mode, auto-place player worms and start battle immediately
+	if fast_play_mode:
+		_auto_place_player_worms()
+		phase = Phase.BATTLE
+		current_turn = Turn.PLAYER
+		_roll_pattern()
+
 	state_changed.emit()
+
+func _auto_place_player_worms() -> void:
+	## Randomly place 2 worms for the player (used in fast play mode)
+	var available_worms := get_player_available_worms().duplicate()
+	available_worms.shuffle()
+
+	var worms_to_auto_place := [available_worms[0], available_worms[1 % available_worms.size()]]
+
+	for worm_name in worms_to_auto_place:
+		var placed := false
+		var attempts := 0
+		while not placed and attempts < 100:
+			var origin := Vector2i(randi() % GRID_SIZE, randi() % GRID_SIZE)
+			var rotation: int = [0, 90, 180, 270][randi() % 4]
+			if validate_worm_placement(player_board, worm_name, origin, rotation):
+				var instance := _create_worm_instance(worm_name, origin, rotation)
+				player_board["worms"].append(instance)
+				placed = true
+			attempts += 1
+
+	worms_to_place = []
+	worms_remaining_to_pick = 0
 
 func get_player_available_worms() -> Array:
 	## Returns worms the player can choose from (their unlocked worms)
@@ -96,17 +133,23 @@ func get_player_available_patterns() -> Array:
 	return patterns
 
 func _cpu_place_worms() -> void:
-	# Get worms from NPC's loadout, fallback to global pool
-	var available_worms: Array = []
-	if current_npc_id != "":
-		available_worms = NPCDefs.get_npc_loadout_worms(current_npc_id).duplicate()
-	if available_worms.is_empty():
-		available_worms = WORM_POOL.duplicate()
-	available_worms.shuffle()
-	var cpu_worms := [available_worms[0], available_worms[1 % available_worms.size()]]
+	# Clear selected worms if fighting a different NPC
+	if current_npc_id != _last_npc_id:
+		cpu_selected_worms = []
+		_last_npc_id = current_npc_id
 
-	# Place worms randomly
-	for worm_name in cpu_worms:
+	# Only pick new worms if we don't have a selection yet
+	if cpu_selected_worms.is_empty():
+		var available_worms: Array = []
+		if current_npc_id != "":
+			available_worms = NPCDefs.get_npc_loadout_worms(current_npc_id).duplicate()
+		if available_worms.is_empty():
+			available_worms = WORM_POOL.duplicate()
+		available_worms.shuffle()
+		cpu_selected_worms = [available_worms[0], available_worms[1 % available_worms.size()]]
+
+	# Place the selected worms at random positions (positions change on restart)
+	for worm_name in cpu_selected_worms:
 		var placed := false
 		var attempts := 0
 		while not placed and attempts < 100:
@@ -119,7 +162,10 @@ func _cpu_place_worms() -> void:
 			attempts += 1
 
 func _create_worm_instance(worm_name: String, origin: Vector2i, rotation: int) -> Dictionary:
-	var worm_def = WORM_DEFS[worm_name]
+	var worm_def = WORM_DEFS.get(worm_name, {})
+	if worm_def.is_empty():
+		push_error("Unknown worm: " + worm_name + ", using fallback")
+		worm_def = WORM_DEFS.get("Sprout", {"cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)]})
 	var rotated_cells := _rotate_cells(worm_def["cells"], rotation)
 	var world_cells: Array[Vector2i] = []
 	for cell in rotated_cells:
@@ -157,7 +203,9 @@ func _compute_end_cells(cells: Array[Vector2i]) -> Array[Vector2i]:
 	return ends
 
 func validate_worm_placement(board: Dictionary, worm_name: String, origin: Vector2i, rotation: int) -> bool:
-	var worm_def = WORM_DEFS[worm_name]
+	var worm_def = WORM_DEFS.get(worm_name, {})
+	if worm_def.is_empty():
+		return false
 	var rotated_cells := _rotate_cells(worm_def["cells"], rotation)
 	var occupied := _get_occupied_cells(board)
 	for cell in rotated_cells:
@@ -178,7 +226,9 @@ func _get_occupied_cells(board: Dictionary) -> Dictionary:
 	return occupied
 
 func get_worm_preview_cells(worm_name: String, origin: Vector2i, rotation: int) -> Array[Vector2i]:
-	var worm_def = WORM_DEFS[worm_name]
+	var worm_def = WORM_DEFS.get(worm_name, {})
+	if worm_def.is_empty():
+		return []
 	var rotated_cells := _rotate_cells(worm_def["cells"], rotation)
 	var result: Array[Vector2i] = []
 	for cell in rotated_cells:

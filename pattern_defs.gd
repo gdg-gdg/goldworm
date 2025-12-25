@@ -14,6 +14,15 @@ class_name PatternDefs
 ##   6 cells = Legendary (red)
 ##   7 cells = Mythic (gold)
 ##
+## Special pattern types:
+##   - Gapped: Cells have gaps between them (harder to aim)
+##   - Cursed: Has negative effect (self-damage, board damage)
+##
+## Cursed effects (effect field):
+##   - "self_damage": Hits random cell on YOUR board
+##   - "board_damage": Destroys a random EMPTY cell on enemy board
+##   - "backfire": Chance to hit yourself instead
+##
 ## Starting patterns: Pebble, Twins, Stack, Spike, Corner
 
 static var PATTERNS: Array = [
@@ -139,6 +148,24 @@ static var PATTERNS: Array = [
 		"rarity": "uncommon",
 		"pool": "npc2"
 	},
+	{
+		"name": "Split-Pair",
+		"cells": [Vector2i(0, 0), Vector2i(2, 0)],
+		"rotatable": true,
+		"weight": 6,
+		"rarity": "uncommon",
+		"pool": "npc2",
+		"gapped": true
+	},
+	{
+		"name": "Hollow-Corner",
+		"cells": [Vector2i(0, 0), Vector2i(2, 0), Vector2i(0, 2)],
+		"rotatable": true,
+		"weight": 4,
+		"rarity": "uncommon",
+		"pool": "npc2",
+		"gapped": true
+	},
 
 	# ===================
 	# 4 blocks - Rare (npc2)
@@ -199,6 +226,33 @@ static var PATTERNS: Array = [
 		"rarity": "rare",
 		"pool": "npc3"
 	},
+	{
+		"name": "Fork",
+		"cells": [Vector2i(0, 0), Vector2i(2, 0), Vector2i(1, 1), Vector2i(1, 2)],
+		"rotatable": true,
+		"weight": 3,
+		"rarity": "rare",
+		"pool": "npc3",
+		"gapped": true
+	},
+	{
+		"name": "Broken-Line",
+		"cells": [Vector2i(0, 0), Vector2i(2, 0), Vector2i(4, 0), Vector2i(6, 0)],
+		"rotatable": true,
+		"weight": 2,
+		"rarity": "rare",
+		"pool": "npc3",
+		"gapped": true
+	},
+	{
+		"name": "Horseshoe",
+		"cells": [Vector2i(0, 0), Vector2i(0, 2), Vector2i(1, 1), Vector2i(2, 0), Vector2i(2, 2)],
+		"rotatable": true,
+		"weight": 2,
+		"rarity": "rare",
+		"pool": "npc4",
+		"gapped": true
+	},
 
 	# ===================
 	# 5 blocks - Epic (npc3 + npc4)
@@ -242,6 +296,64 @@ static var PATTERNS: Array = [
 		"weight": 2,
 		"rarity": "epic",
 		"pool": "npc4"
+	},
+	{
+		"name": "Scatter-5",
+		"cells": [Vector2i(0, 0), Vector2i(2, 1), Vector2i(4, 0), Vector2i(1, 2), Vector2i(3, 2)],
+		"rotatable": true,
+		"weight": 1.5,
+		"rarity": "epic",
+		"pool": "npc4",
+		"gapped": true
+	},
+	{
+		"name": "Rake",
+		"cells": [Vector2i(0, 0), Vector2i(2, 0), Vector2i(4, 0), Vector2i(0, 1), Vector2i(2, 1), Vector2i(4, 1)],
+		"rotatable": true,
+		"weight": 1.5,
+		"rarity": "epic",
+		"pool": "npc4",
+		"gapped": true
+	},
+
+	# ===================
+	# CURSED PATTERNS - High power but risky!
+	# ===================
+	{
+		"name": "Crater",
+		"cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1)],
+		"rotatable": true,
+		"weight": 1.5,
+		"rarity": "epic",
+		"pool": "npc4",
+		"cursed": true,
+		"effect": "board_damage",
+		"effect_chance": 1.0,
+		"effect_desc": "Destroys 1 empty cell on enemy board"
+	},
+	{
+		"name": "Ricochet",
+		"cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0)],
+		"rotatable": true,
+		"weight": 1.0,
+		"rarity": "epic",
+		"pool": "npc4",
+		"cursed": true,
+		"effect": "backfire",
+		"effect_chance": 0.25,
+		"effect_desc": "25% chance to hit YOUR board instead"
+	},
+	{
+		"name": "Betrayal",
+		"cells": [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1), Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2)],
+		"rotatable": false,
+		"weight": 0.3,
+		"rarity": "legendary",
+		"pool": "npc5",
+		"cursed": true,
+		"effect": "self_damage",
+		"effect_chance": 1.0,
+		"effect_desc": "Also hits 3 random cells on YOUR board"
 	},
 
 	# ===================
@@ -338,3 +450,34 @@ static func get_rarity(pattern_name: String) -> String:
 		if pattern.get("name") == pattern_name:
 			return pattern.get("rarity", "common")
 	return "common"
+
+# Check if pattern is gapped
+static func is_gapped(pattern_name: String) -> bool:
+	var pattern := get_pattern(pattern_name)
+	return pattern.get("gapped", false)
+
+# Check if pattern is cursed
+static func is_cursed(pattern_name: String) -> bool:
+	var pattern := get_pattern(pattern_name)
+	return pattern.get("cursed", false)
+
+# Get cursed patterns
+static func get_cursed_patterns() -> Array:
+	var result: Array = []
+	for pattern in PATTERNS:
+		if pattern.get("cursed", false):
+			result.append(pattern)
+	return result
+
+# Get gapped patterns
+static func get_gapped_patterns() -> Array:
+	var result: Array = []
+	for pattern in PATTERNS:
+		if pattern.get("gapped", false):
+			result.append(pattern)
+	return result
+
+# Get effect description for cursed pattern
+static func get_effect_desc(pattern_name: String) -> String:
+	var pattern := get_pattern(pattern_name)
+	return pattern.get("effect_desc", "")

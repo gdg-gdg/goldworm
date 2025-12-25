@@ -1,17 +1,16 @@
 extends RefCounted
 class_name WormGodLoot
 ## Worm God - Loot pool
-## Drops: Epic/Legendary/Mythic worms and patterns
+## Drops: Mythic worm and Legendary/Mythic patterns (including cursed!)
 
 # Worms that can drop from defeating this NPC
 static var WORMS: Array[String] = [
-	"Crawler",
-	"Chunk",
-	"Omega",
+	"Leviathan",
 ]
 
 # Patterns that can drop from defeating this NPC
 static var PATTERNS: Array[String] = [
+	"Betrayal",
 	"Chungus",
 	"Stairway",
 	"Tetris-J",

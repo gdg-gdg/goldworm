@@ -235,7 +235,7 @@ static func get_unlock_progress(npc_id: String) -> Dictionary:
 
 static func roll_loot(npc_id: String) -> Dictionary:
 	## Roll for a random item from an NPC's loot pool
-	## Returns { type: "worm"|"pattern", name: String, rarity: String, is_new: bool }
+	## Returns { type: "worm"|"pattern", name: String, rarity: String, is_new: bool, is_shiny: bool }
 	var pool := get_npc_loot_pool(npc_id)
 	if pool.is_empty():
 		return {}
@@ -259,22 +259,74 @@ static func roll_loot(npc_id: String) -> Dictionary:
 	elif item["type"] == "pattern":
 		is_new = not SaveManager.has_pattern(item["name"])
 
+	# Roll for shiny (1 in 100)
+	var is_shiny := SaveManager.roll_shiny()
+
 	return {
 		"type": item["type"],
 		"name": item["name"],
 		"rarity": item["rarity"],
-		"is_new": is_new
+		"is_new": is_new,
+		"is_shiny": is_shiny,
 	}
 
 static func _get_rarity_weight(rarity: String) -> int:
+	## Weights for loot drop chances - higher = more common
+	## Relic is handled separately via relic_drop_chance
 	match rarity:
-		"common": return 10
-		"uncommon": return 6
-		"rare": return 3
-		"epic": return 2
-		"legendary": return 1
+		"common": return 100
+		"uncommon": return 45
+		"rare": return 18
+		"epic": return 7
+		"legendary": return 3
 		"mythic": return 1
-	return 5
+		"relic": return 0  # Relics use separate drop system
+	return 20
+
+static func roll_relic_drop(npc_id: String) -> Dictionary:
+	## Attempt to roll for a relic from this NPC's pool.
+	## Each relic has its own drop chance (1/400 to 1/4000).
+	## Returns empty dict if no relic drop.
+
+	var npc_relics := CosmeticDefs.get_npc_relics(npc_id)
+	if npc_relics.is_empty():
+		return {}
+
+	# Roll for each relic independently
+	for relic in npc_relics:
+		var drop_chance: float = relic.get("drop_chance", 0.0)
+		if drop_chance > 0.0 and randf() < drop_chance:
+			# Got a relic!
+			var is_new := not SaveManager.has_cosmetic(relic["name"])
+			var is_shiny := CosmeticDefs.roll_shiny()
+
+			return {
+				"type": "cosmetic",
+				"name": relic["name"],
+				"rarity": "relic",
+				"is_new": is_new,
+				"is_relic": true,
+				"is_shiny": is_shiny,
+			}
+
+	return {}
+
+static func get_npc_relic_info(npc_id: String) -> Array:
+	## Returns info about relics that can drop from this NPC
+	## For display in UI
+	var relics := CosmeticDefs.get_npc_relics(npc_id)
+	var result: Array = []
+	for relic in relics:
+		var drop_chance: float = relic.get("drop_chance", 0.0)
+		var odds := int(1.0 / drop_chance) if drop_chance > 0 else 0
+		result.append({
+			"name": relic["name"],
+			"slot": relic.get("slot", ""),
+			"bonus": relic.get("bonus", ""),
+			"odds": odds,  # e.g., 400 means "1 in 400"
+			"owned": SaveManager.has_cosmetic(relic["name"]),
+		})
+	return result
 
 static func get_loot_chances(npc_id: String) -> Dictionary:
 	## Calculate drop chance percentage for each item in the loot pool
@@ -284,15 +336,27 @@ static func get_loot_chances(npc_id: String) -> Dictionary:
 		return {}
 
 	# Calculate total weight
-	var total_weight := 0
+	var total_weight := 0.0
 	for item in pool:
-		total_weight += _get_rarity_weight(item["rarity"])
+		total_weight += float(_get_rarity_weight(item["rarity"]))
+
+	if total_weight == 0.0:
+		return {}
 
 	# Calculate percentage for each item
 	var chances: Dictionary = {}
+	var running_total := 0.0
+	var last_item_name := ""
+
 	for item in pool:
-		var weight := _get_rarity_weight(item["rarity"])
-		var percentage := (float(weight) / float(total_weight)) * 100.0
+		var weight := float(_get_rarity_weight(item["rarity"]))
+		var percentage := (weight / total_weight) * 100.0
 		chances[item["name"]] = percentage
+		running_total += percentage
+		last_item_name = item["name"]
+
+	# Fix floating point errors - adjust last item to ensure exact 100%
+	if last_item_name != "" and abs(running_total - 100.0) < 1.0:
+		chances[last_item_name] += (100.0 - running_total)
 
 	return chances

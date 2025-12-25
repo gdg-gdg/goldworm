@@ -9,6 +9,7 @@ const RARITY_COLORS := {
 	"epic": Color(0.9, 0.4, 0.6),
 	"legendary": Color(0.9, 0.3, 0.3),
 	"mythic": Color(1.0, 0.8, 0.2),
+	"relic": Color(0.4, 0.9, 0.6),
 }
 
 var npc_panels: Dictionary = {}
@@ -228,10 +229,20 @@ func _create_npc_panel(npc_id: String) -> Control:
 	var fight_btn := Button.new()
 	fight_btn.name = "FightBtn"
 	fight_btn.text = "Fight!"
-	fight_btn.custom_minimum_size = Vector2(90, 35)
+	fight_btn.custom_minimum_size = Vector2(70, 35)
 	fight_btn.pressed.connect(_on_fight.bind(npc_id))
 	Fonts.apply_button(fight_btn, 14)
 	btn_hbox.add_child(fight_btn)
+
+	# Fast Play button (only for defeated NPCs)
+	var fast_btn := Button.new()
+	fast_btn.name = "FastBtn"
+	fast_btn.text = "Fast"
+	fast_btn.custom_minimum_size = Vector2(45, 35)
+	fast_btn.pressed.connect(_on_fast_play.bind(npc_id))
+	fast_btn.visible = false  # Hidden until NPC is defeated
+	Fonts.apply_button(fast_btn, 12)
+	btn_hbox.add_child(fast_btn)
 
 	# View Drops button
 	var drops_btn := Button.new()
@@ -261,12 +272,14 @@ func _update_npcs() -> void:
 		var panel: PanelContainer = npc_panels[npc_id]
 		var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
 		var unlocked := NPCDefs.is_npc_unlocked(npc_id)
+		var defeated := SaveManager.has_defeated_npc(npc_id)
 		var progress := NPCDefs.get_unlock_progress(npc_id)
 
 		var name_label: Label = panel.find_child("NameLabel", true, false)
 		var desc_label: Label = panel.find_child("DescLabel", true, false)
 		var status_label: Label = panel.find_child("StatusLabel", true, false)
 		var fight_btn: Button = panel.find_child("FightBtn", true, false)
+		var fast_btn: Button = panel.find_child("FastBtn", true, false)
 		var drops_btn: Button = panel.find_child("DropsBtn", true, false)
 		var loadout_btn: Button = panel.find_child("LoadoutBtn", true, false)
 		var portrait_label: Label = panel.get_meta("portrait_label")
@@ -283,6 +296,9 @@ func _update_npcs() -> void:
 			portrait_label.text = npc.get("name", "?")[0]
 			Fonts.apply_body(portrait_label, 48, Color(0.4, 0.9, 0.4))
 			style.border_color = Color(0.4, 0.7, 0.4)
+
+			# Show Fast button only if defeated at least once
+			fast_btn.visible = defeated
 		else:
 			name_label.text = "???"
 			desc_label.text = "Locked"
@@ -290,6 +306,7 @@ func _update_npcs() -> void:
 			Fonts.apply_body(status_label, 11, Color(0.8, 0.5, 0.3))
 			fight_btn.disabled = true
 			fight_btn.text = "Locked"
+			fast_btn.visible = false
 			drops_btn.disabled = true
 			loadout_btn.disabled = true
 			portrait_label.text = "?"
@@ -299,6 +316,13 @@ func _update_npcs() -> void:
 func _on_fight(npc_id: String) -> void:
 	# Store the NPC we're fighting for after the battle
 	GameState.current_npc_id = npc_id
+	GameState.fast_play_mode = false
+	get_tree().change_scene_to_file("res://Main.tscn")
+
+func _on_fast_play(npc_id: String) -> void:
+	# Fast play mode - auto-place worms, random patterns, skip case opening
+	GameState.current_npc_id = npc_id
+	GameState.fast_play_mode = true
 	get_tree().change_scene_to_file("res://Main.tscn")
 
 func _on_back() -> void:
@@ -394,6 +418,18 @@ func _on_view_drops(npc_id: String) -> void:
 			var item_row := _create_drop_item_row(item)
 			items_vbox.add_child(item_row)
 
+	# Show relics
+	var relics := NPCDefs.get_npc_relic_info(npc_id)
+	if relics.size() > 0:
+		var relics_label := Label.new()
+		relics_label.text = "Rare Relics"
+		Fonts.apply_body(relics_label, 16, Color(0.4, 0.9, 0.6))
+		items_vbox.add_child(relics_label)
+
+		for relic in relics:
+			var item_row := _create_relic_row(relic)
+			items_vbox.add_child(item_row)
+
 	# Close button
 	var close_btn := Button.new()
 	close_btn.text = "Close"
@@ -468,6 +504,60 @@ func _create_drop_item_row(item: Dictionary) -> HBoxContainer:
 		Fonts.apply_body(owned_label, 12, Color(0.4, 0.8, 0.4))
 	else:
 		owned_label.text = "Not owned"
+		Fonts.apply_body(owned_label, 12, Color(0.5, 0.5, 0.5))
+	row.add_child(owned_label)
+
+	return row
+
+func _create_relic_row(relic: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+
+	var relic_name: String = relic.get("name", "???")
+	var slot: String = relic.get("slot", "")
+	var bonus: String = relic.get("bonus", "")
+	var odds: int = relic.get("odds", 0)
+	var is_owned: bool = relic.get("owned", false)
+	var rarity_color := Color(0.4, 0.9, 0.6)
+
+	# Left margin spacer
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 8
+	row.add_child(spacer)
+
+	# Odds display (1 in X)
+	var odds_label := Label.new()
+	odds_label.text = "1/%d" % odds if odds > 0 else "???"
+	odds_label.custom_minimum_size.x = 50
+	odds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(odds_label, 12, Color(0.6, 0.6, 0.7))
+	row.add_child(odds_label)
+
+	# Slot icon
+	var slot_icons := {"hat": "👑", "back": "🎒", "hands": "🧤", "neck": "📿", "feet": "👢"}
+	var slot_label := Label.new()
+	slot_label.text = slot_icons.get(slot, "❓")
+	slot_label.add_theme_font_size_override("font_size", 16)
+	slot_label.custom_minimum_size.x = 24
+	row.add_child(slot_label)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = relic_name
+	name_label.custom_minimum_size.x = 160
+	if is_owned:
+		Fonts.apply_body(name_label, 14, rarity_color)
+	else:
+		Fonts.apply_body(name_label, 14, Color(0.8, 0.8, 0.85))
+	row.add_child(name_label)
+
+	# Owned status
+	var owned_label := Label.new()
+	if is_owned:
+		owned_label.text = "Owned"
+		Fonts.apply_body(owned_label, 12, Color(0.4, 0.8, 0.4))
+	else:
+		owned_label.text = ""
 		Fonts.apply_body(owned_label, 12, Color(0.5, 0.5, 0.5))
 	row.add_child(owned_label)
 

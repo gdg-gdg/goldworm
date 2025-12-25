@@ -9,6 +9,7 @@ const RARITY_COLORS := {
 	"epic": Color(0.9, 0.4, 0.6),
 	"legendary": Color(0.9, 0.3, 0.3),
 	"mythic": Color(1.0, 0.8, 0.2),
+	"relic": Color(0.4, 0.9, 0.6),
 }
 
 const ITEM_WIDTH := 120
@@ -42,6 +43,7 @@ func _ready() -> void:
 	loot_pool = NPCDefs.get_npc_loot_pool(npc_id)
 	loot_chances = NPCDefs.get_loot_chances(npc_id)
 	_build_ui()
+	# Always show case opening animation (even in fast play mode)
 
 func _build_ui() -> void:
 	# Background
@@ -261,6 +263,18 @@ func _build_contents_panel() -> PanelContainer:
 			var row := _create_contents_row(item)
 			vbox.add_child(row)
 
+	# Show relics section
+	var relics := NPCDefs.get_npc_relic_info(npc_id)
+	if relics.size() > 0:
+		var relics_label := Label.new()
+		relics_label.text = "Rare Relics"
+		Fonts.apply_body(relics_label, 14, Color(0.4, 0.9, 0.6))
+		vbox.add_child(relics_label)
+
+		for relic in relics:
+			var row := _create_relic_contents_row(relic)
+			vbox.add_child(row)
+
 	return panel
 
 func _create_contents_row(item: Dictionary) -> HBoxContainer:
@@ -319,6 +333,60 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 		var check := Label.new()
 		check.text = "Y"
 		Fonts.apply_body(check, 14, Color(0.3, 0.8, 0.3))
+		row.add_child(check)
+
+	return row
+
+func _create_relic_contents_row(relic: Dictionary) -> HBoxContainer:
+	var relic_name: String = relic.get("name", "???")
+	var slot: String = relic.get("slot", "")
+	var odds: int = relic.get("odds", 0)
+	var is_owned: bool = relic.get("owned", false)
+	var rarity_color := Color(0.4, 0.9, 0.6)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+
+	if is_owned:
+		row.modulate.a = 0.5
+
+	# Small margin/spacer at start
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 4
+	row.add_child(spacer)
+
+	# Odds display (1 in X)
+	var odds_label := Label.new()
+	odds_label.text = "1/%d" % odds if odds > 0 else "???"
+	odds_label.custom_minimum_size.x = 40
+	odds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(odds_label, 10, Color(0.6, 0.6, 0.7))
+	row.add_child(odds_label)
+
+	# Slot icon
+	var slot_icons := {"hat": "👑", "back": "🎒", "hands": "🧤", "neck": "📿", "feet": "👢"}
+	var slot_label := Label.new()
+	slot_label.text = slot_icons.get(slot, "❓")
+	slot_label.add_theme_font_size_override("font_size", 14)
+	slot_label.custom_minimum_size.x = 20
+	row.add_child(slot_label)
+
+	# Name (truncated if needed)
+	var name_label := Label.new()
+	name_label.text = relic_name
+	name_label.custom_minimum_size.x = 120
+	name_label.clip_text = true
+	if is_owned:
+		Fonts.apply_body(name_label, 11, rarity_color.darkened(0.4))
+	else:
+		Fonts.apply_body(name_label, 11, rarity_color)
+	row.add_child(name_label)
+
+	# Owned check
+	if is_owned:
+		var check := Label.new()
+		check.text = "Y"
+		Fonts.apply_body(check, 12, Color(0.3, 0.8, 0.3))
 		row.add_child(check)
 
 	return row
@@ -704,7 +772,34 @@ func _save_unlock() -> void:
 		SaveManager.unlock_pattern(loot_item["name"], rarity)
 
 func _on_continue() -> void:
+	# Reset fast play mode when leaving
+	GameState.fast_play_mode = false
 	get_tree().change_scene_to_file("res://NPCMenu.tscn")
+
+func _instant_loot() -> void:
+	## Fast play mode - skip animation, show result immediately
+	case_opened = true
+
+	# Roll for loot
+	loot_item = NPCDefs.roll_loot(npc_id)
+
+	# Hide the loot box button and contents panel
+	loot_box_btn.get_parent().visible = false
+	contents_panel.visible = false
+
+	# Update title for fast mode
+	defeated_label.text = "Quick loot!"
+
+	# Show result immediately
+	_show_result()
+
+	# Save the unlock
+	_save_unlock()
+
+	# Record NPC defeat
+	SaveManager.record_npc_defeat(npc_id)
+
+	continue_btn.visible = true
 
 func _create_shape_visual(cells: Array, color: Color, size: float = 12.0) -> Control:
 	var container := Control.new()

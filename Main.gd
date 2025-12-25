@@ -102,6 +102,29 @@ func _ready() -> void:
 	_connect_signals()
 	_update_ui()
 
+	# In fast play mode, skip to first turn (pattern already rolled in GameState)
+	if GameState.fast_play_mode:
+		await get_tree().process_frame
+		# Just display the already-rolled pattern
+		var pattern: Dictionary = GameState.current_pattern
+		var cell_count: int = pattern.get("cells", []).size()
+		var is_miss: bool = pattern.get("is_miss", false)
+
+		if is_miss:
+			roll_label.text = pattern["name"] + " - SKIP!"
+			roll_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+			incoming_label.text = "You got a " + pattern["name"] + "! Turn skipped..."
+			await get_tree().create_timer(0.5).timeout
+			incoming_label.text = ""
+			GameState.current_turn = GameState.Turn.CPU
+			_update_ui()
+			await _do_cpu_turn()
+		else:
+			roll_label.text = pattern["name"]
+			roll_label.add_theme_color_override("font_color", _get_rarity_color(cell_count))
+			input_locked = false
+			_update_ui()
+
 func _balance_side_panels() -> void:
 	var left := get_node_or_null("RootMargin/MainHBox/LeftPanel")
 	var right := get_node_or_null("RootMargin/MainHBox/RightPanel")
@@ -1123,10 +1146,6 @@ func _do_cpu_turn() -> void:
 	status_label.text = "ENEMY TURN"
 	roll_label.text = pattern["name"]
 	roll_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.3))
-	incoming_label.text = "Enemy using: " + pattern["name"]
-
-	# Pause to let player see the pattern
-	await get_tree().create_timer(0.8).timeout
 
 	# AI chooses strike - pass worm names (AI knows WHICH worms, not WHERE)
 	var worm_names := GameState.get_player_worm_names_for_ai()
@@ -1137,19 +1156,27 @@ func _do_cpu_turn() -> void:
 	GameState.current_pattern_rotation = choice["rotation"]
 	var anchor: Vector2i = choice["anchor"]
 
-	# Play targeting scan animation on player grid
-	await _play_targeting_animation(anchor)
-
-	# Show final target
-	incoming_label.text = "INCOMING!"
-	_highlight_strike_preview(anchor, player_cells)
-	await get_tree().create_timer(0.6).timeout
+	if GameState.fast_play_mode:
+		# Fast mode: instant attack, no animations
+		_highlight_strike_preview(anchor, player_cells)
+		await get_tree().create_timer(0.15).timeout
+	else:
+		# Normal mode: show targeting animation
+		incoming_label.text = "Enemy using: " + pattern["name"]
+		await get_tree().create_timer(0.8).timeout
+		await _play_targeting_animation(anchor)
+		incoming_label.text = "INCOMING!"
+		_highlight_strike_preview(anchor, player_cells)
+		await get_tree().create_timer(0.6).timeout
 
 	# Apply strike
 	var impacts: Array = GameState.apply_strike(GameState.Owner.CPU, anchor)
 
-	# Animate impacts
-	await _animate_impacts(impacts, player_cells)
+	# Animate impacts (faster in fast mode)
+	if GameState.fast_play_mode:
+		await _animate_impacts_fast(impacts, player_cells)
+	else:
+		await _animate_impacts(impacts, player_cells)
 
 	incoming_label.text = ""
 
@@ -1159,22 +1186,27 @@ func _do_cpu_turn() -> void:
 		input_locked = false
 		return
 
-	# Player's turn - roll new pattern with case animation
+	# Player's turn - roll new pattern (fast or with animation)
 	await get_tree().create_timer(0.3).timeout
-	await _play_roll_animation()
-	_update_ui()
-
-	# Check if player got a miss
-	if GameState.current_pattern.get("is_miss", false):
-		incoming_label.text = "You got a " + GameState.current_pattern["name"] + "! Turn skipped..."
-		await get_tree().create_timer(1.0).timeout
-		incoming_label.text = ""
-		# Skip back to CPU turn
-		GameState.current_turn = GameState.Turn.CPU
-		_update_ui()
-		await _do_cpu_turn()
-	else:
+	if GameState.fast_play_mode:
+		await _fast_roll_pattern()
 		input_locked = false
+		_update_ui()
+	else:
+		await _play_roll_animation()
+		_update_ui()
+
+		# Check if player got a miss
+		if GameState.current_pattern.get("is_miss", false):
+			incoming_label.text = "You got a " + GameState.current_pattern["name"] + "! Turn skipped..."
+			await get_tree().create_timer(1.0).timeout
+			incoming_label.text = ""
+			# Skip back to CPU turn
+			GameState.current_turn = GameState.Turn.CPU
+			_update_ui()
+			await _do_cpu_turn()
+		else:
+			input_locked = false
 
 func _play_targeting_animation(final_anchor: Vector2i) -> void:
 	# Scan across grid with fake targets before landing on real one
@@ -1790,14 +1822,77 @@ func _on_game_over(winner: GameState.Owner) -> void:
 		status_label.text = "VICTORY!\nYou destroyed all enemy worms!"
 		roll_label.text = "YOU WIN!"
 		roll_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
-		# Transition to victory screen after a delay
-		await get_tree().create_timer(2.0).timeout
+		# Transition to victory screen after a delay (shorter in fast mode)
+		var delay := 0.5 if GameState.fast_play_mode else 2.0
+		await get_tree().create_timer(delay).timeout
 		get_tree().change_scene_to_file("res://VictoryScreen.tscn")
 	else:
 		status_label.text = "DEFEAT!\nAll your worms were destroyed!"
 		roll_label.text = "GAME OVER"
 		roll_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-		# Return to NPC menu after a delay
-		await get_tree().create_timer(2.0).timeout
+		# Return to NPC menu after a delay (shorter in fast mode)
+		var delay := 0.5 if GameState.fast_play_mode else 2.0
+		await get_tree().create_timer(delay).timeout
+		GameState.fast_play_mode = false
 		get_tree().change_scene_to_file("res://NPCMenu.tscn")
 	incoming_label.text = ""
+
+# =============================================================================
+# FAST PLAY MODE (Skip case animations)
+# =============================================================================
+
+func _fast_roll_pattern() -> void:
+	## Instantly roll a pattern without case opening animation
+	GameState._roll_pattern()
+	var pattern: Dictionary = GameState.current_pattern
+
+	# Update display
+	var cell_count: int = pattern.get("cells", []).size()
+	var is_miss: bool = pattern.get("is_miss", false)
+
+	if is_miss:
+		roll_label.text = pattern["name"] + " - SKIP!"
+		roll_label.add_theme_color_override("font_color", Color(0.8, 0.2, 0.2))
+	else:
+		roll_label.text = pattern["name"]
+		roll_label.add_theme_color_override("font_color", _get_rarity_color(cell_count))
+
+	# Handle miss - skip turn
+	if is_miss:
+		incoming_label.text = "You got a " + pattern["name"] + "! Turn skipped..."
+		await get_tree().create_timer(0.5).timeout
+		incoming_label.text = ""
+		GameState.current_turn = GameState.Turn.CPU
+		_update_ui()
+		await _do_cpu_turn()
+
+func _animate_impacts_fast(impacts: Array, cells: Array) -> void:
+	## Quick impact animation for fast play mode (no per-cell delays)
+	for impact in impacts:
+		if impact["already_hit"]:
+			continue
+
+		var cell_pos: Vector2i = impact["cell"]
+		var idx: int = cell_pos.y * GRID_SIZE + cell_pos.x
+		var cell: Button = cells[idx]
+		var result: GameState.CellState = impact["result"]
+
+		var color: Color
+		var text: String
+		match result:
+			GameState.CellState.MISS:
+				color = COLOR_MISS
+				text = "."
+			GameState.CellState.HIT_BODY:
+				color = COLOR_HIT
+				text = "X"
+			GameState.CellState.HIT_END:
+				color = COLOR_HIT_END
+				text = "E"
+			_:
+				color = COLOR_EMPTY
+				text = ""
+
+		_style_cell(cell, color, text)
+
+	_update_worm_panels()

@@ -1,7 +1,7 @@
 extends RefCounted
 class_name MoleKingLoadout
 ## Mole King - Medium opponent
-## Loadout: 3-4 segment worms, 3-4 cell patterns
+## Loadout: 3-4 segment worms, 3-4 cell patterns (including gapped)
 
 # Worms this NPC can use in battle (picks 2 randomly)
 static var WORMS: Array[String] = [
@@ -9,8 +9,7 @@ static var WORMS: Array[String] = [
 	"Bendy",
 	"Curly",
 	"Triplet",
-	"Lumpy",
-	"Slinky",
+	"Slope",
 	"Chonk",
 ]
 
@@ -21,8 +20,10 @@ static var PATTERNS: Array[String] = [
 	"Stairs",
 	"Bent",
 	"Gap",
+	"Split-Pair",
 	"Square",
 	"Tetris-L",
 	"Tetris-T",
 	"Tetris-S",
+	"Fork",
 ]
