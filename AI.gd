@@ -316,13 +316,12 @@ static func _get_pattern_cells(anchor: Vector2i, pattern: Dictionary, rotation: 
 	return result
 
 static func _is_valid_pattern_placement(anchor: Vector2i, pattern: Dictionary, rotation: int) -> bool:
+	## Returns true if at least 1 cell of the pattern is within the grid
 	var cells := _get_pattern_cells(anchor, pattern, rotation)
 	for cell in cells:
-		if cell.x < 0 or cell.x >= GameState.GRID_SIZE:
-			return false
-		if cell.y < 0 or cell.y >= GameState.GRID_SIZE:
-			return false
-	return true
+		if cell.x >= 0 and cell.x < GameState.GRID_SIZE and cell.y >= 0 and cell.y < GameState.GRID_SIZE:
+			return true  # At least one cell is in bounds
+	return false  # No cells in bounds
 
 # =============================================================================
 # MAIN ENTRY POINT

@@ -20,9 +20,12 @@ const SPIN_DURATION := 5.0
 
 var npc_id: String = ""
 var loot_item: Dictionary = {}
+var loot_items: Array = []  # For multi-case opening
 var case_opened := false
 var loot_pool: Array = []
 var loot_chances: Dictionary = {}
+var opening_chest_mode := false
+var multi_case_count := 1
 
 # UI references
 var title_label: Label
@@ -37,13 +40,32 @@ var defeated_label: Label
 var contents_panel: PanelContainer
 var root_hbox: HBoxContainer
 var main_vbox: VBoxContainer
+var open_more_btn: Button
+
+# Multi-case UI
+var multi_case_area: Control
+var multi_strips: Array = []
+var multi_pointers: Array = []
 
 func _ready() -> void:
 	npc_id = GameState.current_npc_id
 	loot_pool = NPCDefs.get_npc_loot_pool(npc_id)
 	loot_chances = NPCDefs.get_loot_chances(npc_id)
+
+	# Check if we're opening chests from NPCMenu (read from GameState)
+	opening_chest_mode = GameState.is_chest_opening
+	multi_case_count = GameState.chest_open_count
+
+	# Reset GameState variables for next time
+	GameState.is_chest_opening = false
+	GameState.chest_open_count = 1
+
 	_build_ui()
-	# Always show case opening animation (even in fast play mode)
+
+	# Award coins only for battle victories (not chest opening)
+	if not opening_chest_mode:
+		var coin_reward := NPCDefs.get_npc_coin_reward(npc_id)
+		SaveManager.add_coins(coin_reward)
 
 func _build_ui() -> void:
 	# Background
@@ -72,17 +94,49 @@ func _build_ui() -> void:
 	contents_panel = _build_contents_panel()
 	root_hbox.add_child(contents_panel)
 
+	# Title and coins row
+	var title_row := HBoxContainer.new()
+	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	title_row.add_theme_constant_override("separation", 40)
+	main_vbox.add_child(title_row)
+
 	# Victory title
 	title_label = Label.new()
-	title_label.text = "VICTORY!"
+	if opening_chest_mode:
+		title_label.text = "OPEN CHEST"
+	else:
+		title_label.text = "VICTORY!"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Fonts.apply_title(title_label, 48)
-	main_vbox.add_child(title_label)
+	title_row.add_child(title_label)
 
-	# Defeated NPC name
+	# Coins display (for battle victories, show reward)
+	if not opening_chest_mode:
+		var coin_reward := NPCDefs.get_npc_coin_reward(npc_id)
+		var coins_hbox := HBoxContainer.new()
+		coins_hbox.add_theme_constant_override("separation", 8)
+		title_row.add_child(coins_hbox)
+
+		var coin_icon := Label.new()
+		coin_icon.text = "🪙"
+		coin_icon.add_theme_font_size_override("font_size", 28)
+		coins_hbox.add_child(coin_icon)
+
+		var coin_text := Label.new()
+		coin_text.text = "+%d" % coin_reward
+		Fonts.apply_body(coin_text, 24, Color(0.95, 0.85, 0.3))
+		coins_hbox.add_child(coin_text)
+
+	# Defeated NPC name / Chest info
 	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
 	defeated_label = Label.new()
-	defeated_label.text = "You defeated %s!" % npc.get("name", "???")
+	if opening_chest_mode:
+		if multi_case_count > 1:
+			defeated_label.text = "Opening %d of %s's chests..." % [multi_case_count, npc.get("name", "???")]
+		else:
+			defeated_label.text = "%s's chest" % npc.get("name", "???")
+	else:
+		defeated_label.text = "You defeated %s!" % npc.get("name", "???")
 	defeated_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Fonts.apply_body(defeated_label, 20, Color(0.7, 0.8, 0.7))
 	main_vbox.add_child(defeated_label)
@@ -200,15 +254,27 @@ func _build_ui() -> void:
 	var btn_hbox := HBoxContainer.new()
 	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_hbox.add_theme_constant_override("separation", 20)
+	btn_hbox.custom_minimum_size = Vector2(0, 60)  # Reserve height so nothing jumps
 	main_vbox.add_child(btn_hbox)
 
 	continue_btn = Button.new()
 	continue_btn.text = "Continue"
 	continue_btn.custom_minimum_size = Vector2(150, 50)
 	continue_btn.pressed.connect(_on_continue)
-	continue_btn.visible = false
 	Fonts.apply_button(continue_btn, 18)
 	btn_hbox.add_child(continue_btn)
+
+	# Open 5 More button (only shown after opening 5 chests if player has more)
+	open_more_btn = Button.new()
+	open_more_btn.text = "Open 5 More"
+	open_more_btn.custom_minimum_size = Vector2(200, 50)
+	open_more_btn.pressed.connect(_on_open_more)
+	Fonts.apply_button(open_more_btn, 18)
+	btn_hbox.add_child(open_more_btn)
+
+	# Hide buttons without layout reflow
+	_set_button_hidden(continue_btn, true)
+	_set_button_hidden(open_more_btn, true)
 
 func _build_contents_panel() -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -443,9 +509,15 @@ func _is_item_owned(item: Dictionary) -> bool:
 	else:
 		return SaveManager.has_pattern(item.get("name", ""))
 
-func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelContainer:
+func _set_button_hidden(btn: Button, hidden: bool) -> void:
+	btn.disabled = hidden
+	btn.mouse_filter = Control.MOUSE_FILTER_IGNORE if hidden else Control.MOUSE_FILTER_STOP
+	btn.modulate.a = 0.0 if hidden else 1.0
+
+func _create_item_panel(item: Dictionary, dim_if_owned: bool = false, custom_size: Vector2 = Vector2(ITEM_WIDTH, ITEM_HEIGHT)) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(ITEM_WIDTH, ITEM_HEIGHT)
+	panel.custom_minimum_size = custom_size  # Use the passed size
+	panel.set_meta("loot_item", item)  # Store for measuring winner later
 
 	var item_name: String = item.get("name", "???")
 	var rarity: String = item.get("rarity", "common")
@@ -469,27 +541,28 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 		panel.modulate = Color(0.6, 0.6, 0.6, 0.8)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_top", 4)
-	margin.add_theme_constant_override("margin_bottom", 4)
+	margin.add_theme_constant_override("margin_left", 4)
+	margin.add_theme_constant_override("margin_right", 4)
+	margin.add_theme_constant_override("margin_top", 3)
+	margin.add_theme_constant_override("margin_bottom", 3)
 	panel.add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 3)
+	vbox.add_theme_constant_override("separation", 2)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	margin.add_child(vbox)
 
 	# Top row: emoji and percentage
 	var top_row := HBoxContainer.new()
 	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	top_row.add_theme_constant_override("separation", 8)
+	top_row.add_theme_constant_override("separation", 4)
 	vbox.add_child(top_row)
 
-	# Emoji icon - don't apply custom font so emoji renders properly
+	# Emoji icon - scale based on panel size
 	var icon := Label.new()
 	icon.text = "🐛" if item.get("type") == "worm" else "💥"
-	icon.add_theme_font_size_override("font_size", 20)
+	var icon_size := 14 if custom_size.x < 100 else 20
+	icon.add_theme_font_size_override("font_size", icon_size)
 	top_row.add_child(icon)
 
 	var chance_label := Label.new()
@@ -497,12 +570,14 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 		chance_label.text = "%d%%" % int(chance)
 	else:
 		chance_label.text = "%.1f%%" % chance
-	Fonts.apply_body(chance_label, 12, Color(0.9, 0.85, 0.5))
+	var chance_font_size := 10 if custom_size.x < 100 else 12
+	Fonts.apply_body(chance_label, chance_font_size, Color(0.9, 0.85, 0.5))
 	top_row.add_child(chance_label)
 
-	# Shape preview - centered
+	# Shape preview - sized based on panel
 	var shape_container := Control.new()
-	shape_container.custom_minimum_size = Vector2(ITEM_WIDTH - 16, 50)
+	var shape_height := 32 if custom_size.x < 100 else 50
+	shape_container.custom_minimum_size = Vector2(custom_size.x - 12, shape_height)
 	shape_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(shape_container)
 	_draw_shape_preview(shape_container, item, display_color)
@@ -512,7 +587,10 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 	name_label.text = item_name
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	Fonts.apply_body(name_label, 11, display_color)
+	name_label.clip_text = true
+	name_label.custom_minimum_size.x = custom_size.x - 8
+	var name_font_size := 9 if custom_size.x < 100 else 11
+	Fonts.apply_body(name_label, name_font_size, display_color)
 	vbox.add_child(name_label)
 
 	# Green tick overlay for owned items
@@ -521,7 +599,8 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false) -> PanelCo
 		tick_label.text = "Y"
 		tick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		Fonts.apply_body(tick_label, 48, Color(0.3, 0.9, 0.3, 0.8))
+		var tick_size := 32 if custom_size.x < 100 else 48
+		Fonts.apply_body(tick_label, tick_size, Color(0.3, 0.9, 0.3, 0.8))
 		tick_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 		tick_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(tick_label)
@@ -574,6 +653,53 @@ func _draw_shape_preview(container: Control, item: Dictionary, color: Color) -> 
 		rect.size = Vector2(cell_size - 1, cell_size - 1)
 		container.add_child(rect)
 
+# =============================================================================
+# WEIGHTED STRIP HELPERS
+# =============================================================================
+
+func _pick_item_under_pointer(strip_node: Control, pointer_node: Control) -> Dictionary:
+	# pointer center X in global space
+	var pointer_center_global_x: float = pointer_node.global_position.x + (pointer_node.size.x * 0.5)
+
+	# convert to strip_node local X by subtracting strip_node's global X
+	var pointer_x_local: float = pointer_center_global_x - strip_node.global_position.x
+
+	var best_child: Control = null
+	var best_dist: float = INF
+
+	for child in strip_node.get_children():
+		if not (child is Control):
+			continue
+		var c := child as Control
+		var left := c.position.x
+		var right := c.position.x + c.size.x
+
+		# if pointer is inside this child rect, winner
+		if pointer_x_local >= left and pointer_x_local <= right:
+			return c.get_meta("loot_item", {})
+
+		# else choose nearest by center
+		var center := left + c.size.x * 0.5
+		var d = abs(pointer_x_local - center)
+		if d < best_dist:
+			best_dist = d
+			best_child = c
+
+	return best_child.get_meta("loot_item", {}) if best_child else {}
+
+
+func _fill_strip_weighted(strip_node: HBoxContainer, count: int, custom_size: Vector2) -> void:
+	for i in range(count):
+		var item: Dictionary = NPCDefs.roll_loot(npc_id)  # weighted roll
+		var panel := _create_item_panel(item, true, custom_size)
+		strip_node.add_child(panel)
+
+func _target_x_to_center_child(strip_node: Control, viewport_width: float, child_index: int) -> float:
+	var child := strip_node.get_child(child_index) as Control
+	var clip_center := viewport_width * 0.5
+	var item_center := child.position.x + child.size.x * 0.5
+	return clip_center - item_center
+
 func _on_open_case() -> void:
 	if case_opened:
 		return
@@ -581,9 +707,16 @@ func _on_open_case() -> void:
 	case_opened = true
 	loot_box_btn.disabled = true
 
-	# Roll for loot first
-	loot_item = NPCDefs.roll_loot(npc_id)
+	# Consume chests now that player has clicked to open
+	if opening_chest_mode:
+		SaveManager.use_chest(npc_id, multi_case_count)
 
+	if multi_case_count > 1:
+		await _open_multi_case()
+	else:
+		await _open_single_case()
+
+func _open_single_case() -> void:
 	# Dramatic box opening effect
 	await _play_box_open_animation()
 
@@ -605,10 +738,48 @@ func _on_open_case() -> void:
 	# Save the unlock
 	_save_unlock()
 
-	# Record NPC defeat
-	SaveManager.record_npc_defeat(npc_id)
+	# Record NPC defeat only for battle victories
+	if not opening_chest_mode:
+		SaveManager.record_npc_defeat(npc_id)
 
-	continue_btn.visible = true
+	_set_button_hidden(continue_btn, false)
+
+func _open_multi_case() -> void:
+	# Dramatic box opening effect
+	await _play_box_open_animation()
+
+	# Hide loot box and contents panel
+	loot_box_btn.get_parent().visible = false
+	contents_panel.visible = false
+	defeated_label.text = "Opening %d cases..." % multi_case_count
+
+	# STEP 2: Build strips - each strip gets its corresponding loot_items[i]
+	_build_multi_case_area()
+
+	await get_tree().create_timer(0.3).timeout
+
+	# STEP 3: Animate - strips land on their predetermined items
+	await _play_multi_spin_animation()
+
+	# STEP 4: Show results
+	_show_multi_results()
+
+	# STEP 5: Save - read from strip_data["result"] to guarantee match
+	for strip_data in multi_strips:
+		loot_item = strip_data["result"]
+		_save_unlock()
+
+	# Record NPC defeat only for battle victories
+	if not opening_chest_mode:
+		SaveManager.record_npc_defeat(npc_id)
+
+	_set_button_hidden(continue_btn, false)
+
+	# Show "Open 5 More" button if in chest mode and player has 5+ more chests
+	var remaining := SaveManager.get_chest_count(npc_id)
+	if opening_chest_mode and remaining >= 5:
+		open_more_btn.text = "Open 5 More (%d left)" % remaining
+		_set_button_hidden(open_more_btn, false)
 
 func _play_box_open_animation() -> void:
 	# Shake and flash the box before opening
@@ -639,62 +810,69 @@ func _play_box_open_animation() -> void:
 	await get_tree().create_timer(0.15).timeout
 
 func _play_spin_animation() -> void:
-	# Clear and rebuild strip with many items
+	# Clear strip
 	for child in strip.get_children():
 		child.queue_free()
-
-	# Build a long strip with the winning item near the end
-	var winning_index := STRIP_ITEMS - VISIBLE_ITEMS / 2 - 2 + randi() % 3
-
-	# Calculate how many trailing items we need after the winner
-	# Need enough to fill the right side of the visible area
-	var trailing_items := VISIBLE_ITEMS / 2 + 3
-
-	for i in range(STRIP_ITEMS):
-		var item: Dictionary
-		if i == winning_index:
-			item = loot_item
-		else:
-			item = loot_pool[randi() % loot_pool.size()]
-		# Always dim owned items (including winning item if it's a duplicate)
-		var item_panel := _create_item_panel(item, true)
-		strip.add_child(item_panel)
-
-	# Add extra trailing items after the main strip to prevent empty space on the right
-	for i in range(trailing_items):
-		var item: Dictionary = loot_pool[randi() % loot_pool.size()]
-		var item_panel := _create_item_panel(item, true)
-		strip.add_child(item_panel)
-
-	# Wait a frame for sizes to be valid
 	await get_tree().process_frame
 
-	# Calculate target position using actual strip_container size
-	var clip_center := strip_container.size.x * 0.5
-	var item_center := float(winning_index) * ITEM_WIDTH + ITEM_WIDTH * 0.5
-	var target_x := clip_center - item_center
+	# Weighted fill
+	var base_count := STRIP_ITEMS
+	var trailing := (VISIBLE_ITEMS / 2) + 6 # a bit more tail so "near end" looks fine
+	_fill_strip_weighted(strip, base_count, Vector2(ITEM_WIDTH, ITEM_HEIGHT))
+	_fill_strip_weighted(strip, trailing, Vector2(ITEM_WIDTH, ITEM_HEIGHT))
 
-	# Start position
+	await get_tree().process_frame
+
+	# TRULY RANDOM stop index (can be near ends)
+	# still avoid the literal first 1-2 items and the very last tail items so it can't land on junk
+	var hard_min := 1
+	var hard_max := strip.get_child_count() - 1 - 1
+	var stop_index := randi_range(hard_min, hard_max)
+
+	var viewport_width := strip_container.size.x
+	var target_x := _target_x_to_center_child(strip, viewport_width, stop_index)
+
+	var edge_pad := 10.0
+	var within_item_offset := randf_range(-(ITEM_WIDTH * 0.5) + edge_pad, (ITEM_WIDTH * 0.5) - edge_pad)
+	target_x += within_item_offset
+
+
+	# --- SPIN FEEL: start fast, slight variation, and a tiny settle ---
 	strip.position.x = 0
 
-	# Animate using Tween (frame-rate independent)
+	var speed_variation := randf_range(1.04, 1.07) # only slight variation
+	var duration := SPIN_DURATION * speed_variation
+
+	# Optional: small overshoot then settle back (feels more mechanical)
+	var overshoot_px := randf_range(-14.0, 14.0)
+
 	var tween := create_tween()
-	tween.set_trans(Tween.TRANS_CUBIC)
+	# First phase: fast travel most of the distance
+	tween.set_trans(Tween.TRANS_QUAD)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(strip, "position:x", target_x, SPIN_DURATION)
+	tween.tween_property(strip, "position:x", target_x + overshoot_px, duration * 0.88)
 
-	# Run pointer flash in parallel with the tween (fire and forget)
-	_flash_pointer_during_spin(SPIN_DURATION)
+	# Second phase: settle into final stop
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(strip, "position:x", target_x, duration * 0.12)
 
+	_flash_pointer_during_spin(duration)
 	await tween.finished
-	pointer.color = Color(1.0, 0.8, 0.2)
 
-	# Flash effect at end
+	# let UI positions settle one frame (optional but helps)
+	await get_tree().process_frame
+
+	# Decide winner by measuring under gold bar
+	loot_item = _pick_item_under_pointer(strip, pointer)
+
+	# End flash
 	for i in range(5):
 		pointer.color = Color(1.0, 1.0, 1.0)
 		await get_tree().create_timer(0.1).timeout
 		pointer.color = Color(1.0, 0.8, 0.2)
 		await get_tree().create_timer(0.1).timeout
+
 
 func _flash_pointer_during_spin(duration: float) -> void:
 	var elapsed := 0.0
@@ -776,6 +954,45 @@ func _on_continue() -> void:
 	GameState.fast_play_mode = false
 	get_tree().change_scene_to_file("res://NPCMenu.tscn")
 
+func _on_open_more() -> void:
+	if SaveManager.get_chest_count(npc_id) < 5:
+		_set_button_hidden(open_more_btn, true)
+		return
+
+	SaveManager.use_chest(npc_id, 5)
+
+	_set_button_hidden(continue_btn, true)
+	_set_button_hidden(open_more_btn, true)
+
+	# Clear old strips and results (all inside multi_case_area)
+	if multi_case_area:
+		multi_case_area.queue_free()
+		multi_case_area = null
+	await get_tree().process_frame
+
+	multi_strips = []
+	multi_pointers = []
+
+	multi_case_count = 5
+	defeated_label.text = "Opening 5 more chests..."
+
+	_build_multi_case_area()
+	await get_tree().create_timer(0.3).timeout
+	await _play_multi_spin_animation()
+	_show_multi_results()
+
+	# Save using strip_data["result"] to guarantee match
+	for strip_data in multi_strips:
+		loot_item = strip_data["result"]
+		_save_unlock()
+
+	_set_button_hidden(continue_btn, false)
+
+	var remaining := SaveManager.get_chest_count(npc_id)
+	if remaining >= 5:
+		open_more_btn.text = "Open 5 More (%d left)" % remaining
+		_set_button_hidden(open_more_btn, false)
+
 func _instant_loot() -> void:
 	## Fast play mode - skip animation, show result immediately
 	case_opened = true
@@ -799,7 +1016,7 @@ func _instant_loot() -> void:
 	# Record NPC defeat
 	SaveManager.record_npc_defeat(npc_id)
 
-	continue_btn.visible = true
+	_set_button_hidden(continue_btn, false)
 
 func _create_shape_visual(cells: Array, color: Color, size: float = 12.0) -> Control:
 	var container := Control.new()
@@ -831,3 +1048,387 @@ func _create_shape_visual(cells: Array, color: Color, size: float = 12.0) -> Con
 		container.add_child(dot)
 
 	return container
+
+# =============================================================================
+# MULTI-CASE OPENING (Open 5)
+# =============================================================================
+
+const MULTI_ITEM_WIDTH := 80
+const MULTI_ITEM_HEIGHT := 90
+const MULTI_VISIBLE_ITEMS := 7
+const MULTI_STRIP_ITEMS := 40
+
+func _build_multi_case_area() -> void:
+	# Create a container for all 5 case strips stacked vertically
+	multi_case_area = VBoxContainer.new()
+	multi_case_area.add_theme_constant_override("separation", 4)
+	multi_case_area.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(multi_case_area)
+
+	multi_strips = []
+	multi_pointers = []
+
+	for i in range(multi_case_count):
+		var strip_row := _create_multi_strip_row(i)
+		multi_case_area.add_child(strip_row)
+
+func _create_multi_strip_row(index: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 20)
+
+	# 1. LEFT SIDE: Empty spacer (same width as right side for symmetry)
+	var left_info := Control.new()
+	left_info.custom_minimum_size = Vector2(180, MULTI_ITEM_HEIGHT)
+	row.add_child(left_info)
+
+	# 2. CENTER: The Strip Viewport
+	var strip_area := Control.new()
+	strip_area.custom_minimum_size = Vector2(MULTI_ITEM_WIDTH * MULTI_VISIBLE_ITEMS, MULTI_ITEM_HEIGHT)
+	strip_area.clip_contents = true
+	row.add_child(strip_area)
+
+	# Add background to strip area
+	var bg := ColorRect.new()
+	bg.color = Color(0.08, 0.08, 0.1)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	strip_area.add_child(bg)
+
+	# Border around strip
+	var border := ColorRect.new()
+	border.color = Color(0.35, 0.3, 0.2)
+	border.set_anchors_preset(Control.PRESET_FULL_RECT)
+	border.offset_left = -3
+	border.offset_top = -3
+	border.offset_right = 3
+	border.offset_bottom = 3
+	border.z_index = -1
+	strip_area.add_child(border)
+
+	# The scrolling strip
+	var strip_node := HBoxContainer.new()
+	strip_node.add_theme_constant_override("separation", 0)
+	strip_area.add_child(strip_node)
+
+	# Center pointer
+	var pointer := ColorRect.new()
+	pointer.color = Color(1.0, 0.8, 0.2)
+	pointer.anchor_left = 0.5
+	pointer.anchor_right = 0.5
+	pointer.anchor_top = 0.0
+	pointer.anchor_bottom = 1.0
+	pointer.offset_left = -1.5
+	pointer.offset_right = 1.5
+	pointer.offset_top = -5
+	pointer.offset_bottom = 5
+	strip_area.add_child(pointer)
+	multi_pointers.append(pointer)
+
+	# 3. RIGHT SIDE: Result label (same width as left for symmetry)
+	var right_label := Label.new()
+	right_label.custom_minimum_size = Vector2(180, MULTI_ITEM_HEIGHT)
+	right_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	right_label.pivot_offset = Vector2(0, MULTI_ITEM_HEIGHT / 2)
+	Fonts.apply_body(right_label, 14, Color.WHITE)
+	row.add_child(right_label)
+
+	# Store references for the animation
+	multi_strips.append({
+		"node": strip_node,
+		"label": right_label,
+		"viewport": strip_area,
+		"pointer": pointer,
+		"result": {}
+	})
+
+	return row
+
+func _play_multi_spin_animation() -> void:
+	var tweens: Array[Tween] = []
+	var multi_size := Vector2(MULTI_ITEM_WIDTH, MULTI_ITEM_HEIGHT)
+
+	# Fill all strips first
+	for i in range(multi_strips.size()):
+		var strip_data: Dictionary = multi_strips[i]
+		var strip_node: HBoxContainer = strip_data["node"]
+
+		for child in strip_node.get_children():
+			child.queue_free()
+
+		var base_count := MULTI_STRIP_ITEMS
+		var trailing := (MULTI_VISIBLE_ITEMS / 2) + 8  # give extra tail so "near end" still has items
+		_fill_strip_weighted(strip_node, base_count, multi_size)
+		_fill_strip_weighted(strip_node, trailing, multi_size)
+
+	# Let layout happen
+	await get_tree().process_frame
+
+	# --- CONSTANT SPEED SETUP ---
+	# pixels per second (tweak to taste). Higher = faster spin.
+	var PX_PER_SEC := 1400.0
+	var MIN_DURATION := 2.8
+	var MAX_DURATION := 3.0
+
+	var max_duration := 0.0
+
+	for i in range(multi_strips.size()):
+		var strip_data: Dictionary = multi_strips[i]
+		var strip_node: HBoxContainer = strip_data["node"]
+		var viewport: Control = strip_data["viewport"]
+
+		# TRULY RANDOM stop index (can be near ends) but avoid literal first/last
+		var hard_min := 1
+		var hard_max := strip_node.get_child_count() - 2
+		var stop_index := randi_range(hard_min, hard_max)
+
+		# Compute base target that centres that child
+		var viewport_width := viewport.size.x
+		var target_x := _target_x_to_center_child(strip_node, viewport_width, stop_index)
+
+		# 랜덤 landing inside the item — BUT use the REAL child width (not constant)
+		var child := strip_node.get_child(stop_index) as Control
+		var item_w := child.size.x
+		var edge_pad := 6.0
+		var within_item_offset := randf_range(-(item_w * 0.5) + edge_pad, (item_w * 0.5) - edge_pad)
+		target_x += within_item_offset
+
+		# --- CLAMP so we NEVER scroll past content and show empty ---
+		# strip_node.position.x is how far we've shifted content left/right.
+		# Leftmost allowed: don't expose left empty (generally 0)
+		var min_x := 0.0
+		# Rightmost allowed: content width minus viewport width (negative)
+		var content_w := strip_node.size.x
+		var max_scroll := maxf(0.0, content_w - viewport_width)
+		var max_x := -max_scroll
+
+		target_x = clampf(target_x, max_x, min_x)
+
+		# Reset position
+		strip_node.position.x = 0.0
+
+		# Duration based on distance so SPEED feels consistent across strips
+		var dist = abs(target_x - strip_node.position.x)
+		var duration = dist / PX_PER_SEC
+		duration = clampf(duration, MIN_DURATION, MAX_DURATION)
+
+		# (Optional) tiny stagger without changing speed feel much
+		duration += i * 0.05
+		max_duration = maxf(max_duration, duration)
+
+		# SINGLE PHASE tween: NO OVERSHOOT, NO SETTLE (non-negotiable)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_QUAD)
+		tween.set_ease(Tween.EASE_OUT)
+		tween.tween_property(strip_node, "position:x", target_x, duration)
+		tweens.append(tween)
+
+	# Flash pointers during the longest spin
+	_flash_multi_pointers_during_spin(max_duration)
+
+	# Wait for all tweens (last one)
+	await tweens.back().finished
+	await get_tree().process_frame
+
+	# Measure winners
+	for strip_data in multi_strips:
+		var strip_node2 := strip_data["node"] as Control
+		var ptr := strip_data["pointer"] as Control
+		strip_data["result"] = _pick_item_under_pointer(strip_node2, ptr)
+
+	# End flash
+	for j in range(4):
+		for p in multi_pointers:
+			p.color = Color(1.0, 1.0, 1.0)
+		await get_tree().create_timer(0.08).timeout
+		for p in multi_pointers:
+			p.color = Color(1.0, 0.8, 0.2)
+		await get_tree().create_timer(0.08).timeout
+
+
+func _flash_multi_pointers_during_spin(duration: float) -> void:
+	var elapsed := 0.0
+	while elapsed < duration * 0.8:
+		var flash := fmod(elapsed, 0.08) < 0.02
+		for pointer in multi_pointers:
+			pointer.color = Color(1.0, 1.0, 1.0) if flash else Color(1.0, 0.8, 0.2)
+		await get_tree().create_timer(0.02).timeout
+		elapsed += 0.02
+
+func _show_multi_results() -> void:
+	for i in range(multi_strips.size()):
+		var strip_data: Dictionary = multi_strips[i]
+		var result_label: Label = strip_data["label"]
+		var item: Dictionary = strip_data["result"]
+
+		var is_new: bool = item.get("is_new", false)
+		var rarity: String = item.get("rarity", "common")
+		var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+
+		result_label.text = "→ %s %s" % [item.get("name", "???"), "(NEW!)" if is_new else "(owned)"]
+		result_label.modulate = rarity_color if is_new else rarity_color.darkened(0.3)
+
+		# Add a little "pop" animation to the text
+		var t := create_tween()
+		t.tween_property(result_label, "scale", Vector2(1.2, 1.2), 0.1)
+		t.tween_property(result_label, "scale", Vector2(1.0, 1.0), 0.1)
+
+	defeated_label.text = "%d items unlocked!" % multi_strips.size()
+
+func _create_inline_result(item: Dictionary) -> HBoxContainer:
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+
+	var rarity: String = item.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_new: bool = item.get("is_new", false)
+
+	# Arrow
+	var arrow := Label.new()
+	arrow.text = "→"
+	Fonts.apply_body(arrow, 20, Color(1, 0.8, 0.2))
+	hbox.add_child(arrow)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = item.get("name", "???")
+	Fonts.apply_body(name_label, 14, rarity_color)
+	hbox.add_child(name_label)
+
+	# Status
+	var status := Label.new()
+	if is_new:
+		status.text = "NEW!"
+		Fonts.apply_body(status, 12, Color(0.3, 1.0, 0.3))
+	else:
+		status.text = "(owned)"
+		Fonts.apply_body(status, 12, Color(0.5, 0.5, 0.5))
+	hbox.add_child(status)
+
+	return hbox
+
+func _create_mini_result_card(item: Dictionary) -> PanelContainer:
+	## Compact result card shown next to each strip
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(140, MULTI_ITEM_HEIGHT)
+
+	var rarity: String = item.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_new: bool = item.get("is_new", false)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.12, 0.1)
+	style.border_color = rarity_color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(hbox)
+
+	# Shape preview
+	var cells: Array = []
+	if item.get("type") == "worm":
+		var worm_def: Dictionary = WormDefs.WORMS.get(item.get("name", ""), {})
+		cells = worm_def.get("cells", [])
+	else:
+		var pattern: Dictionary = PatternDefs.get_pattern(item.get("name", ""))
+		cells = pattern.get("cells", [])
+
+	var shape := _create_shape_visual(cells, rarity_color, 6.0)
+	hbox.add_child(shape)
+
+	# Info column
+	var info := VBoxContainer.new()
+	info.add_theme_constant_override("separation", 2)
+	hbox.add_child(info)
+
+	var name_label := Label.new()
+	name_label.text = item.get("name", "???")
+	Fonts.apply_body(name_label, 12, Color.WHITE)
+	info.add_child(name_label)
+
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.substr(0, 4).to_upper()
+	Fonts.apply_body(rarity_label, 10, rarity_color)
+	info.add_child(rarity_label)
+
+	# New/owned indicator
+	var status := Label.new()
+	if is_new:
+		status.text = "NEW!"
+		Fonts.apply_body(status, 11, Color(0.3, 1.0, 0.3))
+	else:
+		status.text = "Owned"
+		Fonts.apply_body(status, 11, Color(0.5, 0.5, 0.5))
+	info.add_child(status)
+
+	return panel
+
+func _create_result_card(item: Dictionary) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(140, 160)
+
+	var rarity: String = item.get("rarity", "common")
+	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+	var is_new: bool = item.get("is_new", false)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.border_color = rarity_color
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(8)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(vbox)
+
+	# Rarity
+	var rarity_label := Label.new()
+	rarity_label.text = rarity.to_upper()
+	rarity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(rarity_label, 11, rarity_color)
+	vbox.add_child(rarity_label)
+
+	# Shape preview
+	var cells: Array = item.get("cells", [])
+	if item.get("type") == "worm":
+		var worm_def: Dictionary = WormDefs.WORMS.get(item.get("name", ""), {})
+		cells = worm_def.get("cells", [])
+	else:
+		var pattern: Dictionary = PatternDefs.get_pattern(item.get("name", ""))
+		cells = pattern.get("cells", [])
+
+	var shape := _create_shape_visual(cells, rarity_color, 8.0)
+	shape.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(shape)
+
+	# Name
+	var name_label := Label.new()
+	name_label.text = item.get("name", "???")
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(name_label, 13, Color.WHITE)
+	vbox.add_child(name_label)
+
+	# Type
+	var type_label := Label.new()
+	type_label.text = "Worm" if item.get("type") == "worm" else "Pattern"
+	type_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(type_label, 10, Color(0.6, 0.6, 0.7))
+	vbox.add_child(type_label)
+
+	# New/duplicate
+	var status_label := Label.new()
+	if is_new:
+		status_label.text = "NEW!"
+		Fonts.apply_body(status_label, 12, Color(0.3, 1.0, 0.3))
+	else:
+		status_label.text = "(Owned)"
+		Fonts.apply_body(status_label, 12, Color(0.5, 0.5, 0.5))
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(status_label)
+
+	return panel

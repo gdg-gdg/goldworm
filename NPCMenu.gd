@@ -16,6 +16,8 @@ var npc_panels: Dictionary = {}
 var selected_npc: String = ""
 var drops_popup: Control = null
 var loadout_popup: Control = null
+var chest_popup: Control = null
+var coins_label: Label = null
 
 func _ready() -> void:
 	_build_ui()
@@ -40,6 +42,7 @@ func _build_ui() -> void:
 
 	# Header
 	var header_hbox := HBoxContainer.new()
+	header_hbox.add_theme_constant_override("separation", 20)
 	main_vbox.add_child(header_hbox)
 
 	var title := Label.new()
@@ -47,6 +50,10 @@ func _build_ui() -> void:
 	Fonts.apply_title(title, 36)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(title)
+
+	# Coins display (center)
+	var coins_panel := _create_coins_panel()
+	header_hbox.add_child(coins_panel)
 
 	# Stats display
 	var stats_panel := _create_stats_panel()
@@ -90,6 +97,34 @@ func _build_ui() -> void:
 	collection_btn.pressed.connect(_on_collection)
 	Fonts.apply_button(collection_btn, 16)
 	bottom_hbox.add_child(collection_btn)
+
+func _create_coins_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(140, 60)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.15, 0.12, 0.08)
+	style.set_corner_radius_all(6)
+	style.border_color = Color(0.8, 0.65, 0.2)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 10)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(hbox)
+
+	var coin_icon := Label.new()
+	coin_icon.text = "🪙"
+	coin_icon.add_theme_font_size_override("font_size", 28)
+	hbox.add_child(coin_icon)
+
+	coins_label = Label.new()
+	coins_label.text = str(SaveManager.get_coins())
+	Fonts.apply_body(coins_label, 26, Color(0.95, 0.85, 0.3))
+	hbox.add_child(coins_label)
+
+	return panel
 
 func _create_stats_panel() -> Control:
 	var panel := PanelContainer.new()
@@ -262,12 +297,26 @@ func _create_npc_panel(npc_id: String) -> Control:
 	Fonts.apply_button(loadout_btn, 12)
 	btn_hbox.add_child(loadout_btn)
 
+	# Chest button (only for defeated NPCs)
+	var chest_btn := Button.new()
+	chest_btn.name = "ChestBtn"
+	chest_btn.text = "📦"
+	chest_btn.custom_minimum_size = Vector2(40, 35)
+	chest_btn.pressed.connect(_on_chest.bind(npc_id))
+	chest_btn.visible = false  # Hidden until NPC is defeated
+	Fonts.apply_button(chest_btn, 14)
+	btn_hbox.add_child(chest_btn)
+
 	panel.set_meta("npc_id", npc_id)
 	panel.set_meta("style", style)
 
 	return panel
 
 func _update_npcs() -> void:
+	# Update coins display
+	if coins_label:
+		coins_label.text = str(SaveManager.get_coins())
+
 	for npc_id in npc_panels:
 		var panel: PanelContainer = npc_panels[npc_id]
 		var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
@@ -282,6 +331,7 @@ func _update_npcs() -> void:
 		var fast_btn: Button = panel.find_child("FastBtn", true, false)
 		var drops_btn: Button = panel.find_child("DropsBtn", true, false)
 		var loadout_btn: Button = panel.find_child("LoadoutBtn", true, false)
+		var chest_btn: Button = panel.find_child("ChestBtn", true, false)
 		var portrait_label: Label = panel.get_meta("portrait_label")
 		var style: StyleBoxFlat = panel.get_meta("style")
 
@@ -297,8 +347,17 @@ func _update_npcs() -> void:
 			Fonts.apply_body(portrait_label, 48, Color(0.4, 0.9, 0.4))
 			style.border_color = Color(0.4, 0.7, 0.4)
 
-			# Show Fast button only if defeated at least once
+			# Show Fast and Chest buttons only if defeated at least once
 			fast_btn.visible = defeated
+			chest_btn.visible = defeated
+
+			# Update chest button text to show owned count
+			if defeated:
+				var chest_count := SaveManager.get_chest_count(npc_id)
+				if chest_count > 0:
+					chest_btn.text = "📦%d" % chest_count
+				else:
+					chest_btn.text = "📦"
 		else:
 			name_label.text = "???"
 			desc_label.text = "Locked"
@@ -307,6 +366,7 @@ func _update_npcs() -> void:
 			fight_btn.disabled = true
 			fight_btn.text = "Locked"
 			fast_btn.visible = false
+			chest_btn.visible = false
 			drops_btn.disabled = true
 			loadout_btn.disabled = true
 			portrait_label.text = "?"
@@ -330,6 +390,190 @@ func _on_back() -> void:
 
 func _on_collection() -> void:
 	get_tree().change_scene_to_file("res://CollectionScreen.tscn")
+
+func _on_chest(npc_id: String) -> void:
+	_show_chest_popup(npc_id)
+
+var current_chest_npc_id: String = ""
+
+func _show_chest_popup(npc_id: String) -> void:
+	# Close existing popup if any
+	if chest_popup != null:
+		chest_popup.queue_free()
+		chest_popup = null
+
+	current_chest_npc_id = npc_id
+	var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
+	var chest_cost := NPCDefs.get_npc_chest_cost(npc_id)
+	var chest_count := SaveManager.get_chest_count(npc_id)
+	var coins := SaveManager.get_coins()
+
+	# Create popup overlay
+	chest_popup = ColorRect.new()
+	chest_popup.color = Color(0, 0, 0, 0.85)
+	chest_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	chest_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(chest_popup)
+
+	# CenterContainer wrapper
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	chest_popup.add_child(center)
+
+	# Main container
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(400, 320)
+	center.add_child(panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.18)
+	style.set_corner_radius_all(12)
+	style.border_color = Color(0.8, 0.65, 0.2)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 15)
+	panel.add_child(vbox)
+
+	# Title
+	var title := Label.new()
+	var npc_name: String = npc.get("name", "???")
+	title.text = "%s's Chests" % npc_name
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_title(title, 24)
+	vbox.add_child(title)
+
+	# Chest icon and count
+	var chest_hbox := HBoxContainer.new()
+	chest_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	chest_hbox.add_theme_constant_override("separation", 10)
+	vbox.add_child(chest_hbox)
+
+	var chest_icon := Label.new()
+	chest_icon.text = "📦"
+	chest_icon.add_theme_font_size_override("font_size", 48)
+	chest_hbox.add_child(chest_icon)
+
+	var owned_label := Label.new()
+	owned_label.name = "ChestOwnedLabel"
+	owned_label.text = "%d owned" % chest_count
+	Fonts.apply_body(owned_label, 20, Color(0.8, 0.8, 0.9))
+	chest_hbox.add_child(owned_label)
+
+	# Buttons container
+	var btn_vbox := VBoxContainer.new()
+	btn_vbox.add_theme_constant_override("separation", 10)
+	vbox.add_child(btn_vbox)
+
+	# Buy button
+	var buy_btn := Button.new()
+	buy_btn.name = "BuyChestBtn"
+	var can_buy := coins >= chest_cost
+	buy_btn.text = "Buy Chest (🪙%d)" % chest_cost
+	buy_btn.disabled = not can_buy
+	buy_btn.custom_minimum_size = Vector2(200, 45)
+	buy_btn.pressed.connect(_on_buy_chest.bind(npc_id))
+	Fonts.apply_button(buy_btn, 16)
+	btn_vbox.add_child(buy_btn)
+
+	# Open 1 button
+	var open_btn := Button.new()
+	open_btn.name = "OpenChestBtn"
+	open_btn.text = "Open 1"
+	open_btn.disabled = chest_count < 1
+	open_btn.custom_minimum_size = Vector2(200, 45)
+	open_btn.pressed.connect(_on_open_chest.bind(npc_id, 1))
+	Fonts.apply_button(open_btn, 16)
+	btn_vbox.add_child(open_btn)
+
+	# Open 5 button
+	var open5_btn := Button.new()
+	open5_btn.name = "Open5ChestBtn"
+	open5_btn.text = "Open 5"
+	open5_btn.disabled = chest_count < 5
+	open5_btn.custom_minimum_size = Vector2(200, 45)
+	open5_btn.pressed.connect(_on_open_chest.bind(npc_id, 5))
+	Fonts.apply_button(open5_btn, 16)
+	btn_vbox.add_child(open5_btn)
+
+	# Coins display
+	var coins_hbox := HBoxContainer.new()
+	coins_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	coins_hbox.add_theme_constant_override("separation", 8)
+	vbox.add_child(coins_hbox)
+
+	var coins_icon := Label.new()
+	coins_icon.text = "🪙"
+	coins_icon.add_theme_font_size_override("font_size", 20)
+	coins_hbox.add_child(coins_icon)
+
+	var coins_lbl := Label.new()
+	coins_lbl.name = "PopupCoinsLabel"
+	coins_lbl.text = str(coins)
+	Fonts.apply_body(coins_lbl, 18, Color(0.95, 0.85, 0.3))
+	coins_hbox.add_child(coins_lbl)
+
+	# Close button
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(120, 40)
+	close_btn.pressed.connect(_close_chest_popup)
+	Fonts.apply_button(close_btn, 16)
+	vbox.add_child(close_btn)
+
+func _on_buy_chest(npc_id: String) -> void:
+	var cost := NPCDefs.get_npc_chest_cost(npc_id)
+	if SaveManager.buy_chest(npc_id, cost):
+		_update_chest_popup_display(npc_id)
+		_update_npcs()
+
+func _update_chest_popup_display(npc_id: String) -> void:
+	if chest_popup == null:
+		return
+
+	var chest_count := SaveManager.get_chest_count(npc_id)
+	var coins := SaveManager.get_coins()
+	var chest_cost := NPCDefs.get_npc_chest_cost(npc_id)
+
+	var owned_label: Label = chest_popup.find_child("ChestOwnedLabel", true, false)
+	if owned_label:
+		owned_label.text = "%d owned" % chest_count
+
+	var buy_btn: Button = chest_popup.find_child("BuyChestBtn", true, false)
+	if buy_btn:
+		buy_btn.disabled = coins < chest_cost
+
+	var open_btn: Button = chest_popup.find_child("OpenChestBtn", true, false)
+	if open_btn:
+		open_btn.disabled = chest_count < 1
+
+	var open5_btn: Button = chest_popup.find_child("Open5ChestBtn", true, false)
+	if open5_btn:
+		open5_btn.disabled = chest_count < 5
+
+	var coins_lbl: Label = chest_popup.find_child("PopupCoinsLabel", true, false)
+	if coins_lbl:
+		coins_lbl.text = str(coins)
+
+func _on_open_chest(npc_id: String, count: int) -> void:
+	# Check if player has enough chests (don't consume yet - wait for click)
+	if SaveManager.get_chest_count(npc_id) < count:
+		return
+
+	_close_chest_popup()
+
+	# Set up GameState for chest opening (VictoryScreen will consume on click)
+	GameState.current_npc_id = npc_id
+	GameState.chest_open_count = count
+	GameState.is_chest_opening = true
+
+	get_tree().change_scene_to_file("res://VictoryScreen.tscn")
+
+func _close_chest_popup() -> void:
+	if chest_popup != null:
+		chest_popup.queue_free()
+		chest_popup = null
 
 var current_drops_chances: Dictionary = {}
 

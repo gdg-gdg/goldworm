@@ -28,6 +28,8 @@ static var NPCS: Dictionary = {
 		"folder": "farmer_joe",
 		"unlock_requirement": {"type": "start"},
 		"difficulty": 1,
+		"coin_reward": 50,
+		"chest_cost": 20,
 	},
 	"npc2": {
 		"id": "npc2",
@@ -36,6 +38,8 @@ static var NPCS: Dictionary = {
 		"folder": "garden_gnome_gary",
 		"unlock_requirement": {"type": "total_drops", "count": 1},
 		"difficulty": 2,
+		"coin_reward": 100,
+		"chest_cost": 40,
 	},
 	"npc3": {
 		"id": "npc3",
@@ -44,6 +48,8 @@ static var NPCS: Dictionary = {
 		"folder": "mole_king",
 		"unlock_requirement": {"type": "total_drops", "count": 3},
 		"difficulty": 3,
+		"coin_reward": 200,
+		"chest_cost": 80,
 	},
 	"npc4": {
 		"id": "npc4",
@@ -52,6 +58,8 @@ static var NPCS: Dictionary = {
 		"folder": "compost_queen",
 		"unlock_requirement": {"type": "rare_drops", "count": 4},
 		"difficulty": 4,
+		"coin_reward": 500,
+		"chest_cost": 200,
 	},
 	"npc5": {
 		"id": "npc5",
@@ -60,6 +68,8 @@ static var NPCS: Dictionary = {
 		"folder": "worm_god",
 		"unlock_requirement": {"type": "collect_all_before"},
 		"difficulty": 5,
+		"coin_reward": 1000,
+		"chest_cost": 500,
 	},
 }
 
@@ -68,6 +78,20 @@ static var NPC_ORDER: Array = ["npc1", "npc2", "npc3", "npc4", "npc5"]
 # Cache for loaded scripts
 static var _loadout_cache: Dictionary = {}
 static var _loot_cache: Dictionary = {}
+
+# =============================================================================
+# COIN & CHEST HELPERS
+# =============================================================================
+
+static func get_npc_coin_reward(npc_id: String) -> int:
+	## Returns the coin reward for defeating this NPC
+	var npc = NPCS.get(npc_id, {})
+	return npc.get("coin_reward", 50)
+
+static func get_npc_chest_cost(npc_id: String) -> int:
+	## Returns the cost to buy a chest from this NPC
+	var npc = NPCS.get(npc_id, {})
+	return npc.get("chest_cost", 20)
 
 # =============================================================================
 # LOADOUT HELPERS (What NPC uses in battle)

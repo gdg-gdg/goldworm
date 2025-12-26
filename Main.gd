@@ -188,7 +188,23 @@ func _build_ui() -> void:
 	center_panel.alignment = BoxContainer.ALIGNMENT_CENTER
 	center_panel.custom_minimum_size.x = 200
 	main_hbox.add_child(center_panel)
-	
+
+	# Coins display at top
+	var coins_hbox := HBoxContainer.new()
+	coins_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	coins_hbox.add_theme_constant_override("separation", 8)
+	center_panel.add_child(coins_hbox)
+
+	var coin_icon := Label.new()
+	coin_icon.text = "🪙"
+	coin_icon.add_theme_font_size_override("font_size", 22)
+	coins_hbox.add_child(coin_icon)
+
+	var coins_lbl := Label.new()
+	coins_lbl.text = str(SaveManager.get_coins())
+	Fonts.apply_body(coins_lbl, 20, Color(0.95, 0.85, 0.3))
+	coins_hbox.add_child(coins_lbl)
+
 	status_label = Label.new()
 	status_label.text = "PLACEMENT PHASE"
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

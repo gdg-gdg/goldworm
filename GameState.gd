@@ -46,6 +46,10 @@ var _last_npc_id: String = ""  # Track NPC changes for worm persistence
 # Fast play mode - auto-place worms, random patterns, skip case opening
 var fast_play_mode: bool = false
 
+# Chest opening mode (set by NPCMenu before entering VictoryScreen)
+var is_chest_opening: bool = false
+var chest_open_count: int = 1
+
 # Persist CPU's selected worms across restarts (only positions change)
 var cpu_selected_worms: Array = []
 
@@ -294,13 +298,12 @@ func get_pattern_cells(anchor: Vector2i) -> Array[Vector2i]:
 	return result
 
 func validate_pattern_placement(anchor: Vector2i) -> bool:
+	## Returns true if at least 1 cell of the pattern is within the grid
 	var cells := get_pattern_cells(anchor)
 	for cell in cells:
-		if cell.x < 0 or cell.x >= GRID_SIZE:
-			return false
-		if cell.y < 0 or cell.y >= GRID_SIZE:
-			return false
-	return true
+		if cell.x >= 0 and cell.x < GRID_SIZE and cell.y >= 0 and cell.y < GRID_SIZE:
+			return true  # At least one cell is in bounds
+	return false  # No cells in bounds
 
 func apply_strike(owner: Owner, anchor: Vector2i) -> Array:
 	var target_board: Dictionary

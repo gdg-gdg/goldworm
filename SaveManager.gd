@@ -32,7 +32,7 @@ func _ready() -> void:
 
 func _create_new_save(save_name: String = "New Save") -> Dictionary:
 	return {
-		"version": 3,
+		"version": 4,
 		"save_name": save_name,
 		"created_at": Time.get_datetime_string_from_system(),
 		"last_played": Time.get_datetime_string_from_system(),
@@ -44,6 +44,8 @@ func _create_new_save(save_name: String = "New Save") -> Dictionary:
 		"shiny_patterns": [],  # Patterns that are shiny variants
 		"equipped_cosmetics": {},  # slot -> cosmetic_name
 		"defeated_npcs": [],
+		"coins": 0,  # Currency for buying chests
+		"chests": {},  # npc_id -> count of owned chests
 		"total_drops": 0,
 		"common_drops": 0,
 		"uncommon_drops": 0,
@@ -181,6 +183,12 @@ func _migrate_save_data() -> void:
 	for pattern in STARTING_PATTERNS:
 		if pattern not in save_data["unlocked_patterns"]:
 			save_data["unlocked_patterns"].append(pattern)
+
+	# Ensure coins and chests exist (added in version 4)
+	if not save_data.has("coins"):
+		save_data["coins"] = 0
+	if not save_data.has("chests"):
+		save_data["chests"] = {}
 
 func save_game() -> bool:
 	## Save current game state
@@ -398,3 +406,55 @@ func unequip_cosmetic(slot: String) -> void:
 		equipped.erase(slot)
 		save_data["equipped_cosmetics"] = equipped
 		save_game()
+
+# =============================================================================
+# COIN MANAGEMENT
+# =============================================================================
+
+func get_coins() -> int:
+	return save_data.get("coins", 0)
+
+func add_coins(amount: int) -> void:
+	save_data["coins"] = save_data.get("coins", 0) + amount
+	save_game()
+
+func spend_coins(amount: int) -> bool:
+	## Spend coins if player has enough. Returns true if successful.
+	var current := get_coins()
+	if current >= amount:
+		save_data["coins"] = current - amount
+		save_game()
+		return true
+	return false
+
+# =============================================================================
+# CHEST MANAGEMENT
+# =============================================================================
+
+func get_chest_count(npc_id: String) -> int:
+	var chests: Dictionary = save_data.get("chests", {})
+	return chests.get(npc_id, 0)
+
+func add_chest(npc_id: String, count: int = 1) -> void:
+	var chests: Dictionary = save_data.get("chests", {})
+	chests[npc_id] = chests.get(npc_id, 0) + count
+	save_data["chests"] = chests
+	save_game()
+
+func use_chest(npc_id: String, count: int = 1) -> bool:
+	## Use chests if player has enough. Returns true if successful.
+	var chests: Dictionary = save_data.get("chests", {})
+	var current: int = chests.get(npc_id, 0)
+	if current >= count:
+		chests[npc_id] = current - count
+		save_data["chests"] = chests
+		save_game()
+		return true
+	return false
+
+func buy_chest(npc_id: String, cost: int) -> bool:
+	## Buy a chest if player has enough coins. Returns true if successful.
+	if spend_coins(cost):
+		add_chest(npc_id)
+		return true
+	return false
