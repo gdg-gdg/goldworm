@@ -322,14 +322,15 @@ func _build_contents_panel() -> PanelContainer:
 	Fonts.apply_title(title, 18)
 	vbox.add_child(title)
 
-	# Group items by type
+	# Group items by type (exclude cosmetics - they're shown in Relics section)
 	var worms: Array = []
 	var patterns: Array = []
 	for item in loot_pool:
 		if item["type"] == "worm":
 			worms.append(item)
-		else:
+		elif item["type"] == "pattern":
 			patterns.append(item)
+		# cosmetics handled separately via get_npc_relic_info
 
 	# Show worms section
 	if worms.size() > 0:
@@ -430,9 +431,9 @@ func _create_contents_row(item: Dictionary) -> HBoxContainer:
 func _create_relic_contents_row(relic: Dictionary) -> HBoxContainer:
 	var relic_name: String = relic.get("name", "???")
 	var slot: String = relic.get("slot", "")
-	var odds: int = relic.get("odds", 0)
 	var is_owned: bool = relic.get("owned", false)
 	var rarity_color := Color(0.4, 0.9, 0.6)
+	var chance: float = loot_chances.get(relic_name, 0.0)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -445,26 +446,35 @@ func _create_relic_contents_row(relic: Dictionary) -> HBoxContainer:
 	spacer.custom_minimum_size.x = 4
 	row.add_child(spacer)
 
-	# Odds display (1 in X)
-	var odds_label := Label.new()
-	odds_label.text = "1/%d" % odds if odds > 0 else "???"
-	odds_label.custom_minimum_size.x = 40
-	odds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	Fonts.apply_body(odds_label, 10, Color(0.6, 0.6, 0.7))
-	row.add_child(odds_label)
+	# Percentage chance (matching worm/pattern format)
+	var chance_label := Label.new()
+	var chance_font_size := 11
+	if chance >= 1.0:
+		chance_label.text = "%.1f%%" % chance
+	elif chance >= 0.1:
+		chance_label.text = "%.2f%%" % chance
+	elif chance >= 0.01:
+		chance_label.text = "%.3f%%" % chance
+	else:
+		chance_label.text = "%.4f%%" % chance
+		chance_font_size = 9  # Shrink for long decimals
+	chance_label.custom_minimum_size.x = 50
+	chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(chance_label, chance_font_size, Color(0.7, 0.7, 0.5))
+	row.add_child(chance_label)
 
 	# Slot icon
 	var slot_icons := {"hat": "👑", "back": "🎒", "hands": "🧤", "neck": "📿", "feet": "👢"}
 	var slot_label := Label.new()
-	slot_label.text = slot_icons.get(slot, "❓")
+	slot_label.text = slot_icons.get(slot, "💎")
 	slot_label.add_theme_font_size_override("font_size", 14)
-	slot_label.custom_minimum_size.x = 20
+	slot_label.custom_minimum_size.x = 24
 	row.add_child(slot_label)
 
 	# Name (truncated if needed)
 	var name_label := Label.new()
 	name_label.text = relic_name
-	name_label.custom_minimum_size.x = 120
+	name_label.custom_minimum_size.x = 115
 	name_label.clip_text = true
 	if is_owned:
 		Fonts.apply_body(name_label, 11, rarity_color.darkened(0.4))
@@ -528,10 +538,14 @@ func _draw_mini_shape(container: Control, item: Dictionary, color: Color) -> voi
 		container.add_child(rect)
 
 func _is_item_owned(item: Dictionary) -> bool:
-	if item.get("type") == "worm":
+	var item_type: String = item.get("type", "")
+	if item_type == "worm":
 		return SaveManager.has_worm(item.get("name", ""))
-	else:
+	elif item_type == "pattern":
 		return SaveManager.has_pattern(item.get("name", ""))
+	elif item_type == "cosmetic":
+		return SaveManager.has_cosmetic(item.get("name", ""))
+	return false
 
 func _set_button_hidden(btn: Button, hidden: bool) -> void:
 	btn.disabled = hidden
@@ -584,17 +598,30 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false, custom_siz
 
 	# Emoji icon - scale based on panel size
 	var icon := Label.new()
-	icon.text = "🐛" if item.get("type") == "worm" else "💥"
+	var item_type: String = item.get("type", "")
+	match item_type:
+		"worm": icon.text = "🐛"
+		"pattern": icon.text = "💥"
+		"cosmetic": icon.text = "💎"
+		_: icon.text = "❓"
 	var icon_size := 14 if custom_size.x < 100 else 20
 	icon.add_theme_font_size_override("font_size", icon_size)
 	top_row.add_child(icon)
 
 	var chance_label := Label.new()
+	var chance_font_size := 10 if custom_size.x < 100 else 12
 	if chance >= 10.0:
 		chance_label.text = "%d%%" % int(chance)
-	else:
+	elif chance >= 1.0:
 		chance_label.text = "%.1f%%" % chance
-	var chance_font_size := 10 if custom_size.x < 100 else 12
+	elif chance >= 0.1:
+		chance_label.text = "%.2f%%" % chance
+	elif chance >= 0.01:
+		chance_label.text = "%.3f%%" % chance
+		chance_font_size = 8 if custom_size.x < 100 else 10  # Shrink for longer text
+	else:
+		chance_label.text = "%.4f%%" % chance
+		chance_font_size = 7 if custom_size.x < 100 else 9  # Shrink more
 	Fonts.apply_body(chance_label, chance_font_size, Color(0.9, 0.85, 0.5))
 	top_row.add_child(chance_label)
 
@@ -606,14 +633,18 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false, custom_siz
 	vbox.add_child(shape_container)
 	_draw_shape_preview(shape_container, item, display_color)
 
-	# Name
+	# Name (allow 2 rows, shrink to fit)
 	var name_label := Label.new()
 	name_label.text = item_name
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	name_label.clip_text = true
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	name_label.custom_minimum_size.x = custom_size.x - 8
+	name_label.max_lines_visible = 2
+	# Shrink font for longer names
 	var name_font_size := 9 if custom_size.x < 100 else 11
+	if item_name.length() > 12:
+		name_font_size = 7 if custom_size.x < 100 else 9
 	Fonts.apply_body(name_label, name_font_size, display_color)
 	vbox.add_child(name_label)
 
@@ -632,9 +663,27 @@ func _create_item_panel(item: Dictionary, dim_if_owned: bool = false, custom_siz
 	return panel
 
 func _draw_shape_preview(container: Control, item: Dictionary, color: Color) -> void:
+	var item_type: String = item.get("type", "")
+
+	# For cosmetics, show slot emoji instead of shape
+	if item_type == "cosmetic":
+		var cosmetic := CosmeticDefs.get_cosmetic(item.get("name", ""))
+		var slot: String = cosmetic.get("slot", "")
+		var slot_icons := {"hat": "👑", "back": "🎒", "hands": "🧤", "neck": "📿", "feet": "👢"}
+
+		var emoji := Label.new()
+		emoji.text = slot_icons.get(slot, "💎")
+		emoji.add_theme_font_size_override("font_size", 32)
+		emoji.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		emoji.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		emoji.set_anchors_preset(Control.PRESET_FULL_RECT)
+		emoji.position.y = -8  # Nudge up to center between top row and name
+		container.add_child(emoji)
+		return
+
 	var cells: Array = []
 
-	if item.get("type") == "worm":
+	if item_type == "worm":
 		var worm_def: Dictionary = WormDefs.WORMS.get(item.get("name", ""), {})
 		cells = worm_def.get("cells", [])
 	else:
@@ -1016,11 +1065,14 @@ func _show_result() -> void:
 
 func _save_unlock() -> void:
 	var rarity: String = loot_item.get("rarity", "common")
+	var item_type: String = loot_item.get("type", "")
 
-	if loot_item.get("type") == "worm":
+	if item_type == "worm":
 		SaveManager.unlock_worm(loot_item["name"], rarity)
-	else:
+	elif item_type == "pattern":
 		SaveManager.unlock_pattern(loot_item["name"], rarity)
+	elif item_type == "cosmetic":
+		SaveManager.unlock_cosmetic(loot_item["name"], false)
 
 func _on_continue() -> void:
 	# Reset fast play mode when leaving

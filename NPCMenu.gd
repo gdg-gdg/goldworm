@@ -126,6 +126,9 @@ func _build_ui() -> void:
 	bottom_hbox.add_child(collection_btn)
 
 func _create_coins_panel() -> Control:
+	var wrapper := HBoxContainer.new()
+	wrapper.add_theme_constant_override("separation", 8)
+
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(140, 60)
 
@@ -151,7 +154,24 @@ func _create_coins_panel() -> Control:
 	Fonts.apply_body(coins_label, 26, Color(0.95, 0.85, 0.3))
 	hbox.add_child(coins_label)
 
-	return panel
+	wrapper.add_child(panel)
+
+	# Debug button to add coins
+	if SaveManager.debug_mode:
+		var debug_btn := Button.new()
+		debug_btn.text = "+10k"
+		debug_btn.custom_minimum_size = Vector2(50, 40)
+		Fonts.apply_button(debug_btn, 12)
+		debug_btn.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
+		debug_btn.pressed.connect(_on_debug_add_coins)
+		wrapper.add_child(debug_btn)
+
+	return wrapper
+
+func _on_debug_add_coins() -> void:
+	SaveManager.add_coins(10000)
+	if coins_label:
+		coins_label.text = str(SaveManager.get_coins())
 
 func _create_stats_panel() -> Control:
 	var panel := PanelContainer.new()
@@ -677,14 +697,15 @@ func _on_view_drops(npc_id: String) -> void:
 	items_vbox.add_theme_constant_override("separation", 8)
 	scroll.add_child(items_vbox)
 
-	# Group items by type
+	# Group items by type (exclude cosmetics - they're shown in Relics section)
 	var worms: Array = []
 	var patterns: Array = []
 	for item in loot_pool:
 		if item["type"] == "worm":
 			worms.append(item)
-		else:
+		elif item["type"] == "pattern":
 			patterns.append(item)
+		# cosmetics handled separately via get_npc_relic_info
 
 	# Show worms
 	if worms.size() > 0:
@@ -806,27 +827,36 @@ func _create_relic_row(relic: Dictionary) -> HBoxContainer:
 	var relic_name: String = relic.get("name", "???")
 	var slot: String = relic.get("slot", "")
 	var bonus: String = relic.get("bonus", "")
-	var odds: int = relic.get("odds", 0)
 	var is_owned: bool = relic.get("owned", false)
 	var rarity_color := Color(0.4, 0.9, 0.6)
+	var chance: float = current_drops_chances.get(relic_name, 0.0)
 
 	# Left margin spacer
 	var spacer := Control.new()
 	spacer.custom_minimum_size.x = 8
 	row.add_child(spacer)
 
-	# Odds display (1 in X)
-	var odds_label := Label.new()
-	odds_label.text = "1/%d" % odds if odds > 0 else "???"
-	odds_label.custom_minimum_size.x = 50
-	odds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	Fonts.apply_body(odds_label, 12, Color(0.6, 0.6, 0.7))
-	row.add_child(odds_label)
+	# Percentage chance (matching worm/pattern format)
+	var chance_label := Label.new()
+	var chance_font_size := 12
+	if chance >= 1.0:
+		chance_label.text = "%.1f%%" % chance
+	elif chance >= 0.1:
+		chance_label.text = "%.2f%%" % chance
+	elif chance >= 0.01:
+		chance_label.text = "%.3f%%" % chance
+	else:
+		chance_label.text = "%.4f%%" % chance
+		chance_font_size = 10  # Shrink for long decimals
+	chance_label.custom_minimum_size.x = 60
+	chance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Fonts.apply_body(chance_label, chance_font_size, Color(0.7, 0.7, 0.5))
+	row.add_child(chance_label)
 
 	# Slot icon
 	var slot_icons := {"hat": "👑", "back": "🎒", "hands": "🧤", "neck": "📿", "feet": "👢"}
 	var slot_label := Label.new()
-	slot_label.text = slot_icons.get(slot, "❓")
+	slot_label.text = slot_icons.get(slot, "💎")
 	slot_label.add_theme_font_size_override("font_size", 16)
 	slot_label.custom_minimum_size.x = 24
 	row.add_child(slot_label)
