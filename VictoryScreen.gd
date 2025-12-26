@@ -906,18 +906,42 @@ func _play_spin_animation() -> void:
 		await get_tree().create_timer(0.1).timeout
 
 
-func _tick_if_crossed(strip_node: Control, pointer_node: Control, state: Dictionary, item_width: float) -> void:
-	# Get pointer center position relative to strip
-	var pointer_rect := pointer_node.get_global_rect()
-	var pointer_line_x := pointer_rect.position.x + pointer_rect.size.x * 0.5
-	var pointer_local_x := pointer_line_x - strip_node.global_position.x
+func _tick_if_crossed_child(strip_node: Control, pointer_node: Control, state: Dictionary) -> void:
+	# pointer center in strip local
+	var pointer_center_global_x := pointer_node.global_position.x + pointer_node.size.x * 0.5
+	var pointer_local_x := pointer_center_global_x - strip_node.global_position.x
 
-	# Add small forward offset to trigger tick right as boundary is crossed, not after
-	var idx := int(floor((pointer_local_x + item_width * 0.1) / item_width))
-	if state.get("last", -999999) == idx:
+	var winner_index := -1
+	var best_dist := INF
+
+	var kids := strip_node.get_children()
+	for i in range(kids.size()):
+		var c := kids[i]
+		if not (c is Control):
+			continue
+		var cc := c as Control
+		var left := cc.position.x
+		var right := cc.position.x + cc.size.x
+
+		# if pointer is inside, that's the winner immediately
+		if pointer_local_x >= left and pointer_local_x <= right:
+			winner_index = i
+			break
+
+		# else choose nearest
+		var center := left + cc.size.x * 0.5
+		var d = abs(pointer_local_x - center)
+		if d < best_dist:
+			best_dist = d
+			winner_index = i
+
+	if winner_index == -1:
 		return
 
-	state["last"] = idx
+	if state.get("last", -999999) == winner_index:
+		return
+
+	state["last"] = winner_index
 
 	if tick_player and tick_player.stream:
 		tick_player.pitch_scale = randf_range(0.96, 1.04)
@@ -926,12 +950,14 @@ func _tick_if_crossed(strip_node: Control, pointer_node: Control, state: Diction
 func _flash_pointer_during_spin(duration: float) -> void:
 	_tick_state_single["last"] = -999999
 	var elapsed := 0.0
-	while elapsed < duration * 0.8:
-		_tick_if_crossed(strip, pointer, _tick_state_single, ITEM_WIDTH)
+	while elapsed < duration:
+		_tick_if_crossed_child(strip, pointer, _tick_state_single)
+
 		if fmod(elapsed, 0.08) < 0.02:
 			pointer.color = Color(1.0, 1.0, 1.0)
 		else:
 			pointer.color = Color(1.0, 0.8, 0.2)
+
 		await get_tree().create_timer(0.02).timeout
 		elapsed += 0.02
 
@@ -1307,14 +1333,14 @@ func _flash_multi_pointers_during_spin(duration: float) -> void:
 		(strip_data["tick_state"] as Dictionary)["last"] = -999999
 
 	var elapsed := 0.0
-	while elapsed < duration * 0.8:
-		# Check for boundary crossings on each strip
+	while elapsed < duration:
 		for strip_data in multi_strips:
-			_tick_if_crossed(strip_data["node"], strip_data["pointer"], strip_data["tick_state"], MULTI_ITEM_WIDTH)
+			_tick_if_crossed_child(strip_data["node"], strip_data["pointer"], strip_data["tick_state"])
 
 		var flash := fmod(elapsed, 0.08) < 0.02
 		for ptr in multi_pointers:
 			ptr.color = Color(1.0, 1.0, 1.0) if flash else Color(1.0, 0.8, 0.2)
+
 		await get_tree().create_timer(0.02).timeout
 		elapsed += 0.02
 
