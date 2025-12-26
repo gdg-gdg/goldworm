@@ -90,6 +90,10 @@ var worm_pool_selected := false
 var pending_worm_def: Dictionary = {}  # The worm won from case opening (with rotatable flag)
 var won_worm_instances: Dictionary = {}  # Stores won worm defs by name (with rotatable flags)
 
+# Tick sound for roll animations
+var tick_player: AudioStreamPlayer
+var _tick_state := {"last": -999999}
+
 # =============================================================================
 # INITIALIZATION
 # =============================================================================
@@ -97,6 +101,14 @@ var won_worm_instances: Dictionary = {}  # Stores won worm defs by name (with ro
 func _ready() -> void:
 	GameState.reset_game()
 	_build_ui()
+
+	# Setup tick sound for roll animations
+	tick_player = AudioStreamPlayer.new()
+	tick_player.stream = preload("res://sounds/tick.wav")
+	tick_player.volume_db = -10
+	tick_player.max_polyphony = 8
+	add_child(tick_player)
+
 	await get_tree().process_frame  # Let containers compute sizes
 	_balance_side_panels()
 	_connect_signals()
@@ -878,6 +890,10 @@ func _play_worm_roll_animation() -> void:
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(case_strip, "position:x", target_x, 3.5)
+
+	# Play tick sounds during roll (runs in parallel)
+	_play_ticks_during_roll(3.5)
+
 	await tween.finished
 
 	# Flash the winning item
@@ -1285,6 +1301,10 @@ func _play_roll_animation() -> void:
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(case_strip, "position:x", target_x, 3.5)
+
+	# Play tick sounds during roll (runs in parallel)
+	_play_ticks_during_roll(3.5)
+
 	await tween.finished
 
 	# Flash the winning item
@@ -1306,6 +1326,52 @@ func _play_roll_animation() -> void:
 
 	# Hide overlay
 	case_overlay.visible = false
+
+func _tick_if_crossed_child(strip_node: Control, marker_node: Control, state: Dictionary) -> void:
+	var marker_center_global_x := marker_node.global_position.x + marker_node.size.x * 0.5
+
+	var winner_index := -1
+	var best_dist := INF
+
+	var kids := strip_node.get_children()
+	for i in range(kids.size()):
+		var c := kids[i]
+		if not (c is Control):
+			continue
+		var cc := c as Control
+		var r := cc.get_global_rect()
+		var left := r.position.x
+		var right := r.position.x + r.size.x
+
+		if marker_center_global_x >= left and marker_center_global_x <= right:
+			winner_index = i
+			break
+
+		var center := left + r.size.x * 0.5
+		var d = abs(marker_center_global_x - center)
+		if d < best_dist:
+			best_dist = d
+			winner_index = i
+
+	if winner_index == -1:
+		return
+
+	if state.get("last", -999999) == winner_index:
+		return
+
+	state["last"] = winner_index
+
+	if tick_player and tick_player.stream:
+		tick_player.pitch_scale = randf_range(0.96, 1.04)
+		tick_player.play()
+
+func _play_ticks_during_roll(duration: float) -> void:
+	_tick_state["last"] = -999999
+	var elapsed := 0.0
+	while elapsed < duration:
+		_tick_if_crossed_child(case_strip, case_marker, _tick_state)
+		await get_tree().create_timer(0.02).timeout
+		elapsed += 0.02
 
 func _populate_case_strip(winning_pattern: Dictionary) -> void:
 	# Clear existing items
