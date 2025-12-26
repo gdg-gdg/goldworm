@@ -682,29 +682,24 @@ func _draw_shape_preview(container: Control, item: Dictionary, color: Color) -> 
 # =============================================================================
 
 func _pick_item_under_pointer(strip_node: Control, pointer_node: Control) -> Dictionary:
-	# pointer center X in global space
-	var pointer_center_global_x: float = pointer_node.global_position.x + (pointer_node.size.x * 0.5)
-
-	# convert to strip_node local X by subtracting strip_node's global X
-	var pointer_x_local: float = pointer_center_global_x - strip_node.global_position.x
+	var pointer_center_global_x := pointer_node.global_position.x + pointer_node.size.x * 0.5
 
 	var best_child: Control = null
-	var best_dist: float = INF
+	var best_dist := INF
 
 	for child in strip_node.get_children():
 		if not (child is Control):
 			continue
 		var c := child as Control
-		var left := c.position.x
-		var right := c.position.x + c.size.x
+		var r := c.get_global_rect()
+		var left := r.position.x
+		var right := r.position.x + r.size.x
 
-		# if pointer is inside this child rect, winner
-		if pointer_x_local >= left and pointer_x_local <= right:
+		if pointer_center_global_x >= left and pointer_center_global_x <= right:
 			return c.get_meta("loot_item", {})
 
-		# else choose nearest by center
-		var center := left + c.size.x * 0.5
-		var d = abs(pointer_x_local - center)
+		var center := left + r.size.x * 0.5
+		var d = abs(pointer_center_global_x - center)
 		if d < best_dist:
 			best_dist = d
 			best_child = c
@@ -893,6 +888,8 @@ func _play_spin_animation() -> void:
 
 	_flash_pointer_during_spin(SPIN_DURATION)
 	await tween.finished
+
+	strip.queue_sort()
 	await get_tree().process_frame
 
 	# Decide winner by measuring under gold bar
@@ -907,9 +904,7 @@ func _play_spin_animation() -> void:
 
 
 func _tick_if_crossed_child(strip_node: Control, pointer_node: Control, state: Dictionary) -> void:
-	# pointer center in strip local
 	var pointer_center_global_x := pointer_node.global_position.x + pointer_node.size.x * 0.5
-	var pointer_local_x := pointer_center_global_x - strip_node.global_position.x
 
 	var winner_index := -1
 	var best_dist := INF
@@ -920,17 +915,18 @@ func _tick_if_crossed_child(strip_node: Control, pointer_node: Control, state: D
 		if not (c is Control):
 			continue
 		var cc := c as Control
-		var left := cc.position.x
-		var right := cc.position.x + cc.size.x
+		var r := cc.get_global_rect()
+		var left := r.position.x
+		var right := r.position.x + r.size.x
 
 		# if pointer is inside, that's the winner immediately
-		if pointer_local_x >= left and pointer_local_x <= right:
+		if pointer_center_global_x >= left and pointer_center_global_x <= right:
 			winner_index = i
 			break
 
 		# else choose nearest
-		var center := left + cc.size.x * 0.5
-		var d = abs(pointer_local_x - center)
+		var center := left + r.size.x * 0.5
+		var d = abs(pointer_center_global_x - center)
 		if d < best_dist:
 			best_dist = d
 			winner_index = i
@@ -1309,6 +1305,11 @@ func _play_multi_spin_animation() -> void:
 
 	# Wait for all tweens (they all finish at the same time now)
 	await tweens.back().finished
+
+	for strip_data in multi_strips:
+		var node := strip_data["node"] as HBoxContainer
+		node.queue_sort()
+
 	await get_tree().process_frame
 
 	# Measure winners
