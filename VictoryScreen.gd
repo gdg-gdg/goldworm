@@ -17,6 +17,9 @@ const ITEM_HEIGHT := 140
 const VISIBLE_ITEMS := 7
 const STRIP_ITEMS := 50
 const SPIN_DURATION := 5.0
+const SPIN_SPEED_PX_PER_SEC := 1200.0  # same for single + multi
+const START_EDGE_PAD := 8.0            # don't start right on a border
+const END_EDGE_PAD := 8.0              # optional: keeps end away from exact borders
 
 var npc_id: String = ""
 var loot_item: Dictionary = {}
@@ -694,6 +697,18 @@ func _fill_strip_weighted(strip_node: HBoxContainer, count: int, custom_size: Ve
 		var panel := _create_item_panel(item, true, custom_size)
 		strip_node.add_child(panel)
 
+func _ensure_strip_has_enough_items(strip_node: HBoxContainer, viewport_width: float, item_width: float, custom_size: Vector2) -> void:
+	# We need enough content width so that even after travelling SPIN_DISTANCE we still have items.
+	# Add a buffer so clamping never hits "empty".
+	var distance_px := SPIN_SPEED_PX_PER_SEC * SPIN_DURATION
+	var needed_content_width := viewport_width + distance_px + item_width * 4.0
+	var needed_items := int(ceili(needed_content_width / item_width)) + 10
+
+	for i in range(needed_items):
+		var item: Dictionary = NPCDefs.roll_loot(npc_id)
+		var panel := _create_item_panel(item, true, custom_size)
+		strip_node.add_child(panel)
+
 func _target_x_to_center_child(strip_node: Control, viewport_width: float, child_index: int) -> float:
 	var child := strip_node.get_child(child_index) as Control
 	var clip_center := viewport_width * 0.5
@@ -815,52 +830,42 @@ func _play_spin_animation() -> void:
 		child.queue_free()
 	await get_tree().process_frame
 
-	# Weighted fill
-	var base_count := STRIP_ITEMS
-	var trailing := (VISIBLE_ITEMS / 2) + 6 # a bit more tail so "near end" looks fine
-	_fill_strip_weighted(strip, base_count, Vector2(ITEM_WIDTH, ITEM_HEIGHT))
-	_fill_strip_weighted(strip, trailing, Vector2(ITEM_WIDTH, ITEM_HEIGHT))
-
+	# Fill enough items for fixed-distance travel
+	var viewport_width := strip_container.size.x
+	_ensure_strip_has_enough_items(strip, viewport_width, ITEM_WIDTH, Vector2(ITEM_WIDTH, ITEM_HEIGHT))
 	await get_tree().process_frame
 
-	# TRULY RANDOM stop index (can be near ends)
-	# still avoid the literal first 1-2 items and the very last tail items so it can't land on junk
-	var hard_min := 1
-	var hard_max := strip.get_child_count() - 1 - 1
-	var stop_index := randi_range(hard_min, hard_max)
+	# Random START inside the first item (this is the only randomness that affects landing)
+	# NOTE: keep it <= 0 so we never reveal empty space on the left.
+	var start_x := -randf_range(START_EDGE_PAD, ITEM_WIDTH - START_EDGE_PAD)
 
-	var viewport_width := strip_container.size.x
-	var target_x := _target_x_to_center_child(strip, viewport_width, stop_index)
+	# Fixed distance + fixed duration => same speed every time
+	var distance_px := SPIN_SPEED_PX_PER_SEC * SPIN_DURATION
+	var target_x := start_x - distance_px
 
-	var edge_pad := 10.0
-	var within_item_offset := randf_range(-(ITEM_WIDTH * 0.5) + edge_pad, (ITEM_WIDTH * 0.5) - edge_pad)
-	target_x += within_item_offset
+	# Optional: nudge end away from borders a touch without changing distance/speed:
+	# (We do this by shifting BOTH start and target equally. Keeps distance identical.)
+	var end_nudge := randf_range(-END_EDGE_PAD, END_EDGE_PAD)
+	start_x += end_nudge
+	target_x += end_nudge
 
+	# Clamp to never show empty
+	var content_w := strip.size.x
+	var max_scroll := maxf(0.0, content_w - viewport_width)
+	var max_x := -max_scroll
+	start_x = clampf(start_x, max_x, 0.0)
+	target_x = clampf(target_x, max_x, 0.0)
 
-	# --- SPIN FEEL: start fast, slight variation, and a tiny settle ---
-	strip.position.x = 0
+	strip.position.x = start_x
 
-	var speed_variation := randf_range(1.04, 1.07) # only slight variation
-	var duration := SPIN_DURATION * speed_variation
-
-	# Optional: small overshoot then settle back (feels more mechanical)
-	var overshoot_px := randf_range(-14.0, 14.0)
-
+	# Drawn-out deceleration, no settle, no overshoot - EXPO has longest tail
 	var tween := create_tween()
-	# First phase: fast travel most of the distance
-	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_trans(Tween.TRANS_EXPO)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(strip, "position:x", target_x + overshoot_px, duration * 0.88)
+	tween.tween_property(strip, "position:x", target_x, SPIN_DURATION)
 
-	# Second phase: settle into final stop
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(strip, "position:x", target_x, duration * 0.12)
-
-	_flash_pointer_during_spin(duration)
+	_flash_pointer_during_spin(SPIN_DURATION)
 	await tween.finished
-
-	# let UI positions settle one frame (optional but helps)
 	await get_tree().process_frame
 
 	# Decide winner by measuring under gold bar
@@ -1147,85 +1152,60 @@ func _play_multi_spin_animation() -> void:
 	var tweens: Array[Tween] = []
 	var multi_size := Vector2(MULTI_ITEM_WIDTH, MULTI_ITEM_HEIGHT)
 
-	# Fill all strips first
-	for i in range(multi_strips.size()):
-		var strip_data: Dictionary = multi_strips[i]
-		var strip_node: HBoxContainer = strip_data["node"]
-
-		for child in strip_node.get_children():
-			child.queue_free()
-
-		var base_count := MULTI_STRIP_ITEMS
-		var trailing := (MULTI_VISIBLE_ITEMS / 2) + 8  # give extra tail so "near end" still has items
-		_fill_strip_weighted(strip_node, base_count, multi_size)
-		_fill_strip_weighted(strip_node, trailing, multi_size)
-
-	# Let layout happen
-	await get_tree().process_frame
-
-	# --- CONSTANT SPEED SETUP ---
-	# pixels per second (tweak to taste). Higher = faster spin.
-	var PX_PER_SEC := 1400.0
-	var MIN_DURATION := 2.8
-	var MAX_DURATION := 3.0
-
-	var max_duration := 0.0
-
+	# Fill all strips with enough items for fixed-distance travel
 	for i in range(multi_strips.size()):
 		var strip_data: Dictionary = multi_strips[i]
 		var strip_node: HBoxContainer = strip_data["node"]
 		var viewport: Control = strip_data["viewport"]
 
-		# TRULY RANDOM stop index (can be near ends) but avoid literal first/last
-		var hard_min := 1
-		var hard_max := strip_node.get_child_count() - 2
-		var stop_index := randi_range(hard_min, hard_max)
+		for child in strip_node.get_children():
+			child.queue_free()
 
-		# Compute base target that centres that child
 		var viewport_width := viewport.size.x
-		var target_x := _target_x_to_center_child(strip_node, viewport_width, stop_index)
+		_ensure_strip_has_enough_items(strip_node, viewport_width, MULTI_ITEM_WIDTH, multi_size)
 
-		# 랜덤 landing inside the item — BUT use the REAL child width (not constant)
-		var child := strip_node.get_child(stop_index) as Control
-		var item_w := child.size.x
-		var edge_pad := 6.0
-		var within_item_offset := randf_range(-(item_w * 0.5) + edge_pad, (item_w * 0.5) - edge_pad)
-		target_x += within_item_offset
+	# Let layout happen
+	await get_tree().process_frame
 
-		# --- CLAMP so we NEVER scroll past content and show empty ---
-		# strip_node.position.x is how far we've shifted content left/right.
-		# Leftmost allowed: don't expose left empty (generally 0)
-		var min_x := 0.0
-		# Rightmost allowed: content width minus viewport width (negative)
+	# Create tweens for each strip - all same speed/duration, different random start
+	for i in range(multi_strips.size()):
+		var strip_data: Dictionary = multi_strips[i]
+		var strip_node: HBoxContainer = strip_data["node"]
+		var viewport: Control = strip_data["viewport"]
+		var viewport_width := viewport.size.x
+
+		# Random START inside first item (unique per strip - this is the only randomness)
+		var start_x := -randf_range(START_EDGE_PAD, MULTI_ITEM_WIDTH - START_EDGE_PAD)
+
+		# Fixed distance, fixed duration
+		var distance_px := SPIN_SPEED_PX_PER_SEC * SPIN_DURATION
+		var target_x := start_x - distance_px
+
+		# Optional tiny end nudge but keep distance identical
+		var end_nudge := randf_range(-END_EDGE_PAD, END_EDGE_PAD)
+		start_x += end_nudge
+		target_x += end_nudge
+
+		# Clamp to never expose empty
 		var content_w := strip_node.size.x
 		var max_scroll := maxf(0.0, content_w - viewport_width)
 		var max_x := -max_scroll
+		start_x = clampf(start_x, max_x, 0.0)
+		target_x = clampf(target_x, max_x, 0.0)
 
-		target_x = clampf(target_x, max_x, min_x)
+		strip_node.position.x = start_x
 
-		# Reset position
-		strip_node.position.x = 0.0
-
-		# Duration based on distance so SPEED feels consistent across strips
-		var dist = abs(target_x - strip_node.position.x)
-		var duration = dist / PX_PER_SEC
-		duration = clampf(duration, MIN_DURATION, MAX_DURATION)
-
-		# (Optional) tiny stagger without changing speed feel much
-		duration += i * 0.05
-		max_duration = maxf(max_duration, duration)
-
-		# SINGLE PHASE tween: NO OVERSHOOT, NO SETTLE (non-negotiable)
+		# Drawn-out deceleration, no settle, no overshoot - EXPO has longest tail
 		var tween := create_tween()
-		tween.set_trans(Tween.TRANS_QUAD)
+		tween.set_trans(Tween.TRANS_EXPO)
 		tween.set_ease(Tween.EASE_OUT)
-		tween.tween_property(strip_node, "position:x", target_x, duration)
+		tween.tween_property(strip_node, "position:x", target_x, SPIN_DURATION)
 		tweens.append(tween)
 
-	# Flash pointers during the longest spin
-	_flash_multi_pointers_during_spin(max_duration)
+	# Flash pointers during spin (all same duration now)
+	_flash_multi_pointers_during_spin(SPIN_DURATION)
 
-	# Wait for all tweens (last one)
+	# Wait for all tweens (they all finish at the same time now)
 	await tweens.back().finished
 	await get_tree().process_frame
 
