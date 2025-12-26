@@ -19,9 +19,36 @@ var loadout_popup: Control = null
 var chest_popup: Control = null
 var coins_label: Label = null
 
+# Hold-to-buy state
+var _buying_held := false
+var _buying_npc_id := ""
+var _buy_hold_time := 0.0
+var _buy_repeat_delay := 0.3  # Start buying every 0.3s when held
+var _buy_initial_delay := 0.4  # Wait this long before rapid buying starts
+var _time_since_last_buy := 0.0
+
 func _ready() -> void:
 	_build_ui()
 	_update_npcs()
+
+func _process(delta: float) -> void:
+	if not _buying_held:
+		return
+
+	_buy_hold_time += delta
+	_time_since_last_buy += delta
+
+	# Wait for initial delay before rapid buying
+	if _buy_hold_time < _buy_initial_delay:
+		return
+
+	# Buy repeatedly while held
+	if _time_since_last_buy >= _buy_repeat_delay:
+		_time_since_last_buy = 0.0
+		_do_buy_chest(_buying_npc_id)
+
+		# Speed up as you hold longer (min 0.08s between buys)
+		_buy_repeat_delay = maxf(0.08, _buy_repeat_delay * 0.85)
 
 func _build_ui() -> void:
 	# Background
@@ -466,14 +493,15 @@ func _show_chest_popup(npc_id: String) -> void:
 	btn_vbox.add_theme_constant_override("separation", 10)
 	vbox.add_child(btn_vbox)
 
-	# Buy button
+	# Buy button (supports hold-to-buy)
 	var buy_btn := Button.new()
 	buy_btn.name = "BuyChestBtn"
 	var can_buy := coins >= chest_cost
 	buy_btn.text = "Buy Chest (🪙%d)" % chest_cost
 	buy_btn.disabled = not can_buy
 	buy_btn.custom_minimum_size = Vector2(200, 45)
-	buy_btn.pressed.connect(_on_buy_chest.bind(npc_id))
+	buy_btn.button_down.connect(_on_buy_button_down.bind(npc_id))
+	buy_btn.button_up.connect(_on_buy_button_up)
 	Fonts.apply_button(buy_btn, 16)
 	btn_vbox.add_child(buy_btn)
 
@@ -522,11 +550,29 @@ func _show_chest_popup(npc_id: String) -> void:
 	Fonts.apply_button(close_btn, 16)
 	vbox.add_child(close_btn)
 
-func _on_buy_chest(npc_id: String) -> void:
+func _on_buy_button_down(npc_id: String) -> void:
+	# Buy one immediately on click
+	_do_buy_chest(npc_id)
+
+	# Start hold-to-buy tracking
+	_buying_held = true
+	_buying_npc_id = npc_id
+	_buy_hold_time = 0.0
+	_time_since_last_buy = 0.0
+	_buy_repeat_delay = 0.3  # Reset to initial delay
+
+func _on_buy_button_up() -> void:
+	_buying_held = false
+	_buying_npc_id = ""
+
+func _do_buy_chest(npc_id: String) -> void:
 	var cost := NPCDefs.get_npc_chest_cost(npc_id)
 	if SaveManager.buy_chest(npc_id, cost):
 		_update_chest_popup_display(npc_id)
 		_update_npcs()
+	else:
+		# Can't afford, stop rapid buying
+		_buying_held = false
 
 func _update_chest_popup_display(npc_id: String) -> void:
 	if chest_popup == null:
