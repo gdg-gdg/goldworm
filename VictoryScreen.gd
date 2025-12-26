@@ -44,11 +44,16 @@ var contents_panel: PanelContainer
 var root_hbox: HBoxContainer
 var main_vbox: VBoxContainer
 var open_more_btn: Button
+var open_another_btn: Button
 
 # Multi-case UI
 var multi_case_area: Control
 var multi_strips: Array = []
 var multi_pointers: Array = []
+
+# Tick sound
+var tick_player: AudioStreamPlayer
+var _tick_state_single := {"last": -999999}
 
 func _ready() -> void:
 	npc_id = GameState.current_npc_id
@@ -64,6 +69,13 @@ func _ready() -> void:
 	GameState.chest_open_count = 1
 
 	_build_ui()
+
+	# Setup tick sound for spin animation
+	tick_player = AudioStreamPlayer.new()
+	tick_player.stream = preload("res://sounds/tick.wav")
+	tick_player.volume_db = -10
+	tick_player.max_polyphony = 8  # lets rapid ticks overlap cleanly
+	add_child(tick_player)
 
 	# Award coins only for battle victories (not chest opening)
 	if not opening_chest_mode:
@@ -267,6 +279,14 @@ func _build_ui() -> void:
 	Fonts.apply_button(continue_btn, 18)
 	btn_hbox.add_child(continue_btn)
 
+	# Open Another button (for single case, if player has more chests)
+	open_another_btn = Button.new()
+	open_another_btn.text = "Open Another"
+	open_another_btn.custom_minimum_size = Vector2(180, 50)
+	open_another_btn.pressed.connect(_on_open_another)
+	Fonts.apply_button(open_another_btn, 18)
+	btn_hbox.add_child(open_another_btn)
+
 	# Open 5 More button (only shown after opening 5 chests if player has more)
 	open_more_btn = Button.new()
 	open_more_btn.text = "Open 5 More"
@@ -277,6 +297,7 @@ func _build_ui() -> void:
 
 	# Hide buttons without layout reflow
 	_set_button_hidden(continue_btn, true)
+	_set_button_hidden(open_another_btn, true)
 	_set_button_hidden(open_more_btn, true)
 
 func _build_contents_panel() -> PanelContainer:
@@ -759,6 +780,12 @@ func _open_single_case() -> void:
 
 	_set_button_hidden(continue_btn, false)
 
+	# Show "Open Another" if player has more chests
+	var remaining := SaveManager.get_chest_count(npc_id)
+	if remaining >= 1:
+		open_another_btn.text = "Open Another (%d left)" % remaining
+		_set_button_hidden(open_another_btn, false)
+
 func _open_multi_case() -> void:
 	# Dramatic box opening effect
 	await _play_box_open_animation()
@@ -879,9 +906,28 @@ func _play_spin_animation() -> void:
 		await get_tree().create_timer(0.1).timeout
 
 
+func _tick_if_crossed(strip_node: Control, pointer_node: Control, state: Dictionary, item_width: float) -> void:
+	# Get pointer center position relative to strip
+	var pointer_rect := pointer_node.get_global_rect()
+	var pointer_line_x := pointer_rect.position.x + pointer_rect.size.x * 0.5
+	var pointer_local_x := pointer_line_x - strip_node.global_position.x
+
+	# Add small forward offset to trigger tick right as boundary is crossed, not after
+	var idx := int(floor((pointer_local_x + item_width * 0.1) / item_width))
+	if state.get("last", -999999) == idx:
+		return
+
+	state["last"] = idx
+
+	if tick_player and tick_player.stream:
+		tick_player.pitch_scale = randf_range(0.96, 1.04)
+		tick_player.play()
+
 func _flash_pointer_during_spin(duration: float) -> void:
+	_tick_state_single["last"] = -999999
 	var elapsed := 0.0
 	while elapsed < duration * 0.8:
+		_tick_if_crossed(strip, pointer, _tick_state_single, ITEM_WIDTH)
 		if fmod(elapsed, 0.08) < 0.02:
 			pointer.color = Color(1.0, 1.0, 1.0)
 		else:
@@ -958,6 +1004,35 @@ func _on_continue() -> void:
 	# Reset fast play mode when leaving
 	GameState.fast_play_mode = false
 	get_tree().change_scene_to_file("res://NPCMenu.tscn")
+
+func _on_open_another() -> void:
+	if SaveManager.get_chest_count(npc_id) < 1:
+		_set_button_hidden(open_another_btn, true)
+		return
+
+	SaveManager.use_chest(npc_id, 1)
+
+	_set_button_hidden(continue_btn, true)
+	_set_button_hidden(open_another_btn, true)
+
+	# Hide result panel
+	result_panel.visible = false
+
+	defeated_label.text = "Opening another chest..."
+
+	await get_tree().create_timer(0.3).timeout
+	await _play_spin_animation()
+
+	_show_result()
+	_save_unlock()
+
+	_set_button_hidden(continue_btn, false)
+
+	# Show "Open Another" if player has more chests
+	var remaining := SaveManager.get_chest_count(npc_id)
+	if remaining >= 1:
+		open_another_btn.text = "Open Another (%d left)" % remaining
+		_set_button_hidden(open_another_btn, false)
 
 func _on_open_more() -> void:
 	if SaveManager.get_chest_count(npc_id) < 5:
@@ -1143,7 +1218,8 @@ func _create_multi_strip_row(index: int) -> HBoxContainer:
 		"label": right_label,
 		"viewport": strip_area,
 		"pointer": pointer,
-		"result": {}
+		"result": {},
+		"tick_state": {"last": -999999}
 	})
 
 	return row
@@ -1226,11 +1302,19 @@ func _play_multi_spin_animation() -> void:
 
 
 func _flash_multi_pointers_during_spin(duration: float) -> void:
+	# Reset tick states
+	for strip_data in multi_strips:
+		(strip_data["tick_state"] as Dictionary)["last"] = -999999
+
 	var elapsed := 0.0
 	while elapsed < duration * 0.8:
+		# Check for boundary crossings on each strip
+		for strip_data in multi_strips:
+			_tick_if_crossed(strip_data["node"], strip_data["pointer"], strip_data["tick_state"], MULTI_ITEM_WIDTH)
+
 		var flash := fmod(elapsed, 0.08) < 0.02
-		for pointer in multi_pointers:
-			pointer.color = Color(1.0, 1.0, 1.0) if flash else Color(1.0, 0.8, 0.2)
+		for ptr in multi_pointers:
+			ptr.color = Color(1.0, 1.0, 1.0) if flash else Color(1.0, 0.8, 0.2)
 		await get_tree().create_timer(0.02).timeout
 		elapsed += 0.02
 
