@@ -20,7 +20,7 @@ const SLOT_ICONS := {
 	"feet": "👢",
 }
 
-var current_tab := 0  # 0 = worms, 1 = patterns, 2 = relics
+var current_tab := 0  # 0 = worms, 1 = patterns, 2 = relics, 3 = stats
 
 func _ready() -> void:
 	_build_ui()
@@ -89,6 +89,14 @@ func _build_ui() -> void:
 	Fonts.apply_button(relics_tab, 16)
 	tab_hbox.add_child(relics_tab)
 
+	var stats_tab := Button.new()
+	stats_tab.name = "StatsTab"
+	stats_tab.text = "Drop Stats"
+	stats_tab.custom_minimum_size = Vector2(150, 40)
+	stats_tab.pressed.connect(_on_tab_stats)
+	Fonts.apply_button(stats_tab, 16)
+	tab_hbox.add_child(stats_tab)
+
 	# Scroll container for items
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -115,9 +123,14 @@ func _on_tab_relics() -> void:
 	current_tab = 2
 	_show_relics()
 
+func _on_tab_stats() -> void:
+	current_tab = 3
+	_show_stats()
+
 func _show_worms() -> void:
 	var grid: GridContainer = find_child("ItemGrid", true, false)
 	_clear_grid(grid)
+	grid.columns = 6  # Reset columns
 
 	var unlocked := SaveManager.get_unlocked_worms()
 
@@ -131,6 +144,7 @@ func _show_worms() -> void:
 func _show_patterns() -> void:
 	var grid: GridContainer = find_child("ItemGrid", true, false)
 	_clear_grid(grid)
+	grid.columns = 6  # Reset columns
 
 	var unlocked := SaveManager.get_unlocked_patterns()
 
@@ -146,6 +160,7 @@ func _show_patterns() -> void:
 func _show_relics() -> void:
 	var grid: GridContainer = find_child("ItemGrid", true, false)
 	_clear_grid(grid)
+	grid.columns = 6  # Reset columns
 
 	var unlocked := SaveManager.get_unlocked_cosmetics()
 	var equipped := SaveManager.get_equipped_cosmetics()
@@ -157,6 +172,201 @@ func _show_relics() -> void:
 		var is_equipped: bool = relic_name in equipped.values()
 		var panel := _create_relic_panel(relic_name, relic_def, is_unlocked, is_equipped)
 		grid.add_child(panel)
+
+func _show_stats() -> void:
+	var grid: GridContainer = find_child("ItemGrid", true, false)
+	_clear_grid(grid)
+
+	# Change to single column layout for stats
+	grid.columns = 1
+
+	# Total stats header
+	var total_panel := _create_stats_header()
+	grid.add_child(total_panel)
+
+	# Show stats for each NPC
+	for npc_id in NPCDefs.NPC_ORDER:
+		var npc: Dictionary = NPCDefs.NPCS.get(npc_id, {})
+		var npc_panel := _create_npc_stats_panel(npc_id, npc)
+		grid.add_child(npc_panel)
+
+func _create_stats_header() -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(800, 80)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.15, 0.18)
+	style.border_color = Color(0.4, 0.5, 0.6)
+	style.set_corner_radius_all(8)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 40)
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(hbox)
+
+	# Total cases opened
+	var cases_vbox := VBoxContainer.new()
+	cases_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_child(cases_vbox)
+
+	var cases_count := Label.new()
+	cases_count.text = str(SaveManager.get_total_chests_opened())
+	cases_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_title(cases_count, 28)
+	cases_vbox.add_child(cases_count)
+
+	var cases_label := Label.new()
+	cases_label.text = "Total Cases Opened"
+	cases_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(cases_label, 12, Color(0.6, 0.6, 0.7))
+	cases_vbox.add_child(cases_label)
+
+	# Total drops by rarity
+	var rarities := ["common", "uncommon", "rare", "epic", "legendary", "mythic", "relic"]
+	for rarity in rarities:
+		var count: int = SaveManager.get_rarity_drops(rarity)
+		if count == 0:
+			continue
+
+		var rar_vbox := VBoxContainer.new()
+		rar_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		hbox.add_child(rar_vbox)
+
+		var rar_count := Label.new()
+		rar_count.text = str(count)
+		rar_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		Fonts.apply_body(rar_count, 20, RARITY_COLORS.get(rarity, Color.WHITE))
+		rar_vbox.add_child(rar_count)
+
+		var rar_label := Label.new()
+		rar_label.text = rarity.capitalize()
+		rar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		Fonts.apply_body(rar_label, 10, RARITY_COLORS.get(rarity, Color.WHITE).darkened(0.2))
+		rar_vbox.add_child(rar_label)
+
+	return panel
+
+func _create_npc_stats_panel(npc_id: String, npc: Dictionary) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(800, 0)
+
+	var is_unlocked := NPCDefs.is_npc_unlocked(npc_id)
+
+	var style := StyleBoxFlat.new()
+	if is_unlocked:
+		style.bg_color = Color(0.1, 0.1, 0.12)
+		style.border_color = Color(0.25, 0.25, 0.3)
+	else:
+		style.bg_color = Color(0.06, 0.06, 0.08)
+		style.border_color = Color(0.15, 0.15, 0.18)
+	style.set_corner_radius_all(6)
+	style.set_border_width_all(1)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 15)
+	margin.add_theme_constant_override("margin_right", 15)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	margin.add_child(vbox)
+
+	# NPC header row
+	var header_hbox := HBoxContainer.new()
+	header_hbox.add_theme_constant_override("separation", 15)
+	vbox.add_child(header_hbox)
+
+	var npc_name := Label.new()
+	if is_unlocked:
+		npc_name.text = npc.get("name", "???")
+		Fonts.apply_title(npc_name, 20)
+	else:
+		npc_name.text = "???"
+		Fonts.apply_body(npc_name, 20, Color(0.35, 0.35, 0.4))
+	header_hbox.add_child(npc_name)
+
+	# Show unlock progress for locked NPCs
+	if not is_unlocked:
+		var progress := NPCDefs.get_unlock_progress(npc_id)
+		var lock_label := Label.new()
+		lock_label.text = "🔒 %s (%d/%d)" % [progress["description"], progress["current"], progress["required"]]
+		Fonts.apply_body(lock_label, 12, Color(0.4, 0.4, 0.45))
+		header_hbox.add_child(lock_label)
+		return panel  # Return early - don't show items for locked NPCs
+
+	var cases_opened := SaveManager.get_chests_opened(npc_id)
+	var cases_label := Label.new()
+	cases_label.text = "📦 %d cases opened" % cases_opened
+	Fonts.apply_body(cases_label, 14, Color(0.6, 0.7, 0.8))
+	header_hbox.add_child(cases_label)
+
+	# Items grid
+	var items_grid := GridContainer.new()
+	items_grid.columns = 4
+	items_grid.add_theme_constant_override("h_separation", 20)
+	items_grid.add_theme_constant_override("v_separation", 6)
+	vbox.add_child(items_grid)
+
+	# Get loot pool for this NPC
+	var loot_pool := NPCDefs.get_npc_loot_pool(npc_id)
+
+	for item in loot_pool:
+		var item_name: String = item.get("name", "")
+		var item_type: String = item.get("type", "")
+		var rarity: String = item.get("rarity", "common")
+		var drop_count: int = SaveManager.get_item_drop_count(item_name)
+		var is_owned := false
+
+		if item_type == "worm":
+			is_owned = SaveManager.has_worm(item_name)
+		elif item_type == "pattern":
+			is_owned = SaveManager.has_pattern(item_name)
+		elif item_type == "cosmetic":
+			is_owned = SaveManager.has_cosmetic(item_name)
+
+		var item_hbox := HBoxContainer.new()
+		item_hbox.add_theme_constant_override("separation", 6)
+		items_grid.add_child(item_hbox)
+
+		# Type icon
+		var icon := Label.new()
+		match item_type:
+			"worm": icon.text = "🐛"
+			"pattern": icon.text = "💥"
+			"cosmetic":
+				var cosmetic := CosmeticDefs.get_cosmetic(item_name)
+				var slot: String = cosmetic.get("slot", "")
+				icon.text = SLOT_ICONS.get(slot, "💎")
+		icon.add_theme_font_size_override("font_size", 14)
+		item_hbox.add_child(icon)
+
+		# Item name
+		var name_label := Label.new()
+		name_label.text = item_name
+		name_label.custom_minimum_size.x = 140
+		var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
+		if is_owned:
+			Fonts.apply_body(name_label, 12, rarity_color)
+		else:
+			Fonts.apply_body(name_label, 12, Color(0.4, 0.4, 0.45))
+		item_hbox.add_child(name_label)
+
+		# Drop count
+		var count_label := Label.new()
+		count_label.text = "×%d" % drop_count if drop_count > 0 else "—"
+		count_label.custom_minimum_size.x = 40
+		if drop_count > 0:
+			Fonts.apply_body(count_label, 12, Color(0.7, 0.8, 0.7))
+		else:
+			Fonts.apply_body(count_label, 12, Color(0.35, 0.35, 0.4))
+		item_hbox.add_child(count_label)
+
+	return panel
 
 func _create_relic_panel(relic_name: String, relic_def: Dictionary, is_unlocked: bool, is_equipped: bool) -> PanelContainer:
 	var panel := PanelContainer.new()

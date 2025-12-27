@@ -46,6 +46,8 @@ func _create_new_save(save_name: String = "New Save") -> Dictionary:
 		"defeated_npcs": [],
 		"coins": 0,  # Currency for buying chests
 		"chests": {},  # npc_id -> count of owned chests
+		"chests_opened": {},  # npc_id -> count opened
+		"drop_counts": {},  # item_name -> count obtained
 		"total_drops": 0,
 		"common_drops": 0,
 		"uncommon_drops": 0,
@@ -261,6 +263,10 @@ const SHINY_CHANCE := 0.01  # 1 in 100 for all drops
 
 func unlock_worm(worm_name: String, rarity: String, is_shiny: bool = false) -> bool:
 	## Unlock a new worm. Returns true if it was newly unlocked.
+	## Always records the drop for stats, even if already owned.
+	_record_drop(rarity)
+	_record_item_drop(worm_name)
+
 	var worms: Array = save_data.get("unlocked_worms", [])
 	if worm_name in worms:
 		# Already have it - but maybe we got a shiny upgrade?
@@ -268,7 +274,7 @@ func unlock_worm(worm_name: String, rarity: String, is_shiny: bool = false) -> b
 			var shiny_list: Array = save_data.get("shiny_worms", [])
 			shiny_list.append(worm_name)
 			save_data["shiny_worms"] = shiny_list
-			save_game()
+		save_game()
 		return false
 
 	worms.append(worm_name)
@@ -279,12 +285,15 @@ func unlock_worm(worm_name: String, rarity: String, is_shiny: bool = false) -> b
 		shiny_list.append(worm_name)
 		save_data["shiny_worms"] = shiny_list
 
-	_record_drop(rarity)
 	save_game()
 	return true
 
 func unlock_pattern(pattern_name: String, rarity: String, is_shiny: bool = false) -> bool:
 	## Unlock a new pattern. Returns true if it was newly unlocked.
+	## Always records the drop for stats, even if already owned.
+	_record_drop(rarity)
+	_record_item_drop(pattern_name)
+
 	var patterns: Array = save_data.get("unlocked_patterns", [])
 	if pattern_name in patterns:
 		# Already have it - but maybe we got a shiny upgrade?
@@ -292,7 +301,7 @@ func unlock_pattern(pattern_name: String, rarity: String, is_shiny: bool = false
 			var shiny_list: Array = save_data.get("shiny_patterns", [])
 			shiny_list.append(pattern_name)
 			save_data["shiny_patterns"] = shiny_list
-			save_game()
+		save_game()
 		return false
 
 	patterns.append(pattern_name)
@@ -303,7 +312,6 @@ func unlock_pattern(pattern_name: String, rarity: String, is_shiny: bool = false
 		shiny_list.append(pattern_name)
 		save_data["shiny_patterns"] = shiny_list
 
-	_record_drop(rarity)
 	save_game()
 	return true
 
@@ -328,6 +336,11 @@ func _record_drop(rarity: String) -> void:
 	save_data["total_drops"] = save_data.get("total_drops", 0) + 1
 	var key := rarity.to_lower() + "_drops"
 	save_data[key] = save_data.get(key, 0) + 1
+
+func _record_item_drop(item_name: String) -> void:
+	var counts: Dictionary = save_data.get("drop_counts", {})
+	counts[item_name] = counts.get(item_name, 0) + 1
+	save_data["drop_counts"] = counts
 
 # =============================================================================
 # COSMETIC QUERIES
@@ -355,6 +368,10 @@ func get_equipped_in_slot(slot: String) -> String:
 
 func unlock_cosmetic(cosmetic_name: String, is_shiny: bool = false) -> bool:
 	## Unlock a new cosmetic. Returns true if it was newly unlocked.
+	## Always records the drop for stats, even if already owned.
+	_record_drop("relic")
+	_record_item_drop(cosmetic_name)
+
 	var cosmetics: Array = save_data.get("unlocked_cosmetics", [])
 	if cosmetic_name in cosmetics:
 		# Already have it - but maybe we got a shiny upgrade?
@@ -362,7 +379,7 @@ func unlock_cosmetic(cosmetic_name: String, is_shiny: bool = false) -> bool:
 			var shiny_list: Array = save_data.get("shiny_cosmetics", [])
 			shiny_list.append(cosmetic_name)
 			save_data["shiny_cosmetics"] = shiny_list
-			save_game()
+		save_game()
 		return false
 
 	cosmetics.append(cosmetic_name)
@@ -372,8 +389,6 @@ func unlock_cosmetic(cosmetic_name: String, is_shiny: bool = false) -> bool:
 		var shiny_list: Array = save_data.get("shiny_cosmetics", [])
 		shiny_list.append(cosmetic_name)
 		save_data["shiny_cosmetics"] = shiny_list
-
-	_record_drop("relic")
 	save_game()
 	return true
 
@@ -406,6 +421,32 @@ func unequip_cosmetic(slot: String) -> void:
 		equipped.erase(slot)
 		save_data["equipped_cosmetics"] = equipped
 		save_game()
+
+# =============================================================================
+# DROP STATISTICS
+# =============================================================================
+
+func get_chests_opened(npc_id: String) -> int:
+	## Get number of chests opened for a specific NPC
+	var opened: Dictionary = save_data.get("chests_opened", {})
+	return opened.get(npc_id, 0)
+
+func get_total_chests_opened() -> int:
+	## Get total chests opened across all NPCs
+	var opened: Dictionary = save_data.get("chests_opened", {})
+	var total := 0
+	for count in opened.values():
+		total += count
+	return total
+
+func get_item_drop_count(item_name: String) -> int:
+	## Get number of times a specific item has been obtained
+	var counts: Dictionary = save_data.get("drop_counts", {})
+	return counts.get(item_name, 0)
+
+func get_all_drop_counts() -> Dictionary:
+	## Get all item drop counts
+	return save_data.get("drop_counts", {})
 
 # =============================================================================
 # COIN MANAGEMENT
@@ -448,6 +489,10 @@ func use_chest(npc_id: String, count: int = 1) -> bool:
 	if current >= count:
 		chests[npc_id] = current - count
 		save_data["chests"] = chests
+		# Track chests opened
+		var opened: Dictionary = save_data.get("chests_opened", {})
+		opened[npc_id] = opened.get(npc_id, 0) + count
+		save_data["chests_opened"] = opened
 		save_game()
 		return true
 	return false

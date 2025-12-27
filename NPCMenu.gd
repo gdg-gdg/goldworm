@@ -224,7 +224,26 @@ func _create_stats_panel() -> Control:
 	Fonts.apply_body(patterns_label, 12, Color.WHITE)
 	patterns_vbox.add_child(patterns_label)
 
-	# Drops count
+	# Relics count
+	var relics_vbox := VBoxContainer.new()
+	relics_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	relics_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_child(relics_vbox)
+
+	var relics_count := Label.new()
+	relics_count.name = "RelicsCount"
+	relics_count.text = str(SaveManager.get_unlocked_cosmetics().size())
+	relics_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(relics_count, 24, Color(0.4, 0.9, 0.6))  # Relic color
+	relics_vbox.add_child(relics_count)
+
+	var relics_label := Label.new()
+	relics_label.text = "Relics"
+	relics_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	Fonts.apply_body(relics_label, 12, Color.WHITE)
+	relics_vbox.add_child(relics_label)
+
+	# Total drops count (including duplicates)
 	var drops_vbox := VBoxContainer.new()
 	drops_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	drops_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -238,7 +257,7 @@ func _create_stats_panel() -> Control:
 	drops_vbox.add_child(drops_count)
 
 	var drops_label := Label.new()
-	drops_label.text = "Drops"
+	drops_label.text = "Total Drops"
 	drops_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Fonts.apply_body(drops_label, 12, Color.WHITE)
 	drops_vbox.add_child(drops_label)
