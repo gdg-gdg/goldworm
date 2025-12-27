@@ -148,6 +148,18 @@ func _balance_side_panels() -> void:
 	right.custom_minimum_size.x = w
 
 func _build_ui() -> void:
+	# Animated background with NPC-specific colors
+	var bg := ColorRect.new()
+	bg.color = Color.WHITE  # Shader will override
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var shader := load("res://n64_bg.gdshader")
+	var shader_mat := ShaderMaterial.new()
+	shader_mat.shader = shader
+	var colors := ShaderConfig.get_npc_fight_colors(GameState.current_npc_id)
+	ShaderConfig.apply_to_material(shader_mat, colors)
+	bg.material = shader_mat
+	add_child(bg)
+
 	# Root MarginContainer for consistent padding at any resolution
 	var margin := MarginContainer.new()
 	margin.name = "RootMargin"
@@ -171,7 +183,7 @@ func _build_ui() -> void:
 	left_panel.name = "LeftPanel"
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left_panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	left_panel.alignment = BoxContainer.ALIGNMENT_BEGIN
 	main_hbox.add_child(left_panel)
 
 	var player_label := Label.new()
@@ -298,7 +310,7 @@ func _build_ui() -> void:
 	right_panel.name = "RightPanel"
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	right_panel.alignment = BoxContainer.ALIGNMENT_BEGIN
 	main_hbox.add_child(right_panel)
 
 	var cpu_label := Label.new()

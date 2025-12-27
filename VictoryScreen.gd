@@ -55,6 +55,9 @@ var multi_pointers: Array = []
 var tick_player: AudioStreamPlayer
 var _tick_state_single := {"last": -999999}
 
+# Background shader
+var bg_shader_mat: ShaderMaterial
+
 func _ready() -> void:
 	npc_id = GameState.current_npc_id
 	loot_pool = NPCDefs.get_npc_loot_pool(npc_id)
@@ -83,10 +86,16 @@ func _ready() -> void:
 		SaveManager.add_coins(coin_reward)
 
 func _build_ui() -> void:
-	# Background
+	# Background with shader (starts silver for case opening)
 	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.08, 0.05)
+	bg.color = Color.WHITE  # Shader will override
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var shader := load("res://n64_bg.gdshader")
+	bg_shader_mat = ShaderMaterial.new()
+	bg_shader_mat.shader = shader
+	var colors := ShaderConfig.get_screen_colors("case_opening")
+	ShaderConfig.apply_to_material(bg_shader_mat, colors)
+	bg.material = bg_shader_mat
 	add_child(bg)
 
 	# CenterContainer wrapper for proper centering
@@ -1006,12 +1015,22 @@ func _flash_pointer_during_spin(duration: float) -> void:
 		await get_tree().create_timer(0.02).timeout
 		elapsed += 0.02
 
+func _update_bg_for_rarity(rarity: String) -> void:
+	## Update background shader colors based on item rarity
+	if bg_shader_mat == null:
+		return
+	var colors := ShaderConfig.get_rarity_colors(rarity)
+	ShaderConfig.apply_to_material(bg_shader_mat, colors)
+
 func _show_result() -> void:
 	result_panel.visible = true
 
 	var rarity: String = loot_item.get("rarity", "common")
 	var rarity_color: Color = RARITY_COLORS.get(rarity, Color.WHITE)
 	var is_new: bool = loot_item.get("is_new", false)
+
+	# Update background to match rarity
+	_update_bg_for_rarity(rarity)
 
 	# Update border color
 	var style: StyleBoxFlat = result_panel.get_theme_stylebox("panel").duplicate()
@@ -1398,6 +1417,14 @@ func _flash_multi_pointers_during_spin(duration: float) -> void:
 		elapsed += 0.02
 
 func _show_multi_results() -> void:
+	# Find highest rarity among all items
+	var rarities: Array = []
+	for strip_data in multi_strips:
+		var item: Dictionary = strip_data["result"]
+		rarities.append(item.get("rarity", "common"))
+	var highest_rarity := ShaderConfig.get_highest_rarity(rarities)
+	_update_bg_for_rarity(highest_rarity)
+
 	for i in range(multi_strips.size()):
 		var strip_data: Dictionary = multi_strips[i]
 		var result_label: Label = strip_data["label"]

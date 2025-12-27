@@ -53,8 +53,14 @@ func _process(delta: float) -> void:
 func _build_ui() -> void:
 	# Background
 	var bg := ColorRect.new()
-	bg.color = Color(0.08, 0.08, 0.12)
+	bg.color = Color.WHITE  # Shader will override
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var shader := load("res://n64_bg.gdshader")
+	var shader_mat := ShaderMaterial.new()
+	shader_mat.shader = shader
+	var colors := ShaderConfig.get_screen_colors("npc_menu")
+	ShaderConfig.apply_to_material(shader_mat, colors)
+	bg.material = shader_mat
 	add_child(bg)
 
 	# Main container
